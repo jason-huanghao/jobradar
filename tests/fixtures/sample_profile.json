@@ -1,0 +1,92 @@
+{
+  "personal": {
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "phone": "",
+    "location": "Hannover, Germany",
+    "linkedin_url": "https://linkedin.com/in/johndoe",
+    "github_url": "https://github.com/johndoe",
+    "website_url": "",
+    "nationality": "Chinese",
+    "languages": [
+      {"language": "English", "level": "fluent"},
+      {"language": "German", "level": "B2"},
+      {"language": "Chinese", "level": "native"}
+    ]
+  },
+  "target": {
+    "roles": ["AI Engineer", "Applied AI Researcher", "ML Engineer", "Solutions Architect"],
+    "roles_de": ["KI-Ingenieur", "ML-Ingenieur", "Datenwissenschaftler"],
+    "locations": ["Hannover", "Berlin", "Hamburg", "Remote"],
+    "work_mode": "flexible",
+    "salary_expectation": "",
+    "visa_needed": true,
+    "earliest_start": "2026-07",
+    "industries": ["AI/ML", "Automotive", "Research"],
+    "dealbreakers": ["defense/military"]
+  },
+  "education": [
+    {
+      "degree": "PhD",
+      "field": "Computer Science",
+      "institution": "Leibniz University Hannover",
+      "location": "Hannover, Germany",
+      "start_date": "2022",
+      "end_date": "present",
+      "thesis_topic": "Causality with Knowledge Graphs: Semantics and Inference",
+      "gpa": ""
+    },
+    {
+      "degree": "M.Sc.",
+      "field": "Computer Science",
+      "institution": "Technical University Munich",
+      "location": "Munich, Germany",
+      "start_date": "2019",
+      "end_date": "2022",
+      "thesis_topic": "",
+      "gpa": "1.3"
+    }
+  ],
+  "experience": [
+    {
+      "title": "Research Assistant",
+      "company": "L3S Research Center",
+      "location": "Hannover",
+      "start_date": "2022",
+      "end_date": "present",
+      "description": "Developed KG-enhanced causal discovery algorithms. Published 3 papers on neuro-symbolic AI. Built RAG pipelines with LLMs.",
+      "technologies": ["Python", "PyTorch", "SPARQL", "LangChain"]
+    },
+    {
+      "title": "ML Engineer Intern",
+      "company": "Siemens AI Lab",
+      "location": "Munich",
+      "start_date": "2021",
+      "end_date": "2022",
+      "description": "Implemented NLP pipeline for industrial document processing. Deployed models on edge devices.",
+      "technologies": ["Python", "TensorFlow", "Docker", "Kubernetes"]
+    }
+  ],
+  "skills": {
+    "technical": ["Python", "PyTorch", "TensorFlow", "SPARQL", "SQL", "Docker", "Linux"],
+    "frameworks": ["LangChain", "FastAPI", "pgmpy", "NetworkX", "React"],
+    "domains": ["NLP", "Causal Discovery", "RAG", "Knowledge Graphs", "Edge AI"],
+    "soft": ["Technical Writing", "Research", "Science Communication"],
+    "certifications": []
+  },
+  "publications": [
+    {
+      "title": "KG-Enhanced Causal Discovery",
+      "venue": "IEEE Access",
+      "year": "2024",
+      "url": ""
+    },
+    {
+      "title": "Causality with Knowledge Graphs",
+      "venue": "WSDM Doctoral Consortium",
+      "year": "2026",
+      "url": ""
+    }
+  ],
+  "story": "John Doe is a PhD candidate at Leibniz University Hannover with deep expertise in the intersection of Knowledge Graphs, Causal Inference, and Large Language Models. His research combines symbolic AI methods with modern neural approaches, producing publications in IEEE Access and WSDM. With hands-on experience at Siemens AI Lab deploying ML models on edge devices, he bridges the gap between research and production. He is fluent in English and Chinese with professional German, making him well-suited for international AI teams in Germany."
+}

@@ -1,0 +1,200 @@
+# ============================================================
+# OpenClaw JobRadar Agent — Configuration
+# ============================================================
+
+# -----------------------------------------------------------
+# CANDIDATE
+# -----------------------------------------------------------
+candidate:
+  cv_path: "./cv/cv_current.md"
+  profile_path: "./cv/profile.md"
+  profile_json_path: ""
+
+# -----------------------------------------------------------
+# LLM CONFIGURATION
+# -----------------------------------------------------------
+llm:
+  text:
+    provider: "volcengine"
+    model: "doubao-seed-2.0-code"
+    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
+    api_key_env: "ARK_API_KEY"
+    temperature: 0.3
+    max_tokens: 4096
+
+  vision:
+    provider: "volcengine"
+    model: "doubao-seed-2.0-code"
+    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
+    api_key_env: "ARK_API_KEY"
+
+  embedding:
+    provider: "volcengine"
+    model: "doubao-embedding"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3"
+    api_key_env: "ARK_API_KEY"
+
+# -----------------------------------------------------------
+# PROVIDER PRESETS
+# -----------------------------------------------------------
+provider_presets:
+  volcengine:
+    openai_base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
+    anthropic_base_url: "https://ark.cn-beijing.volces.com/api/coding"
+    api_key_env: "ARK_API_KEY"
+    models:
+      - doubao-seed-2.0-code
+      - doubao-seed-code
+      - glm-4.7
+      - deepseek-v3.2
+      - kimi-k2.5
+  openai:
+    openai_base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+  deepseek:
+    openai_base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+  openrouter:
+    openai_base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+  ollama:
+    openai_base_url: "http://localhost:11434/v1"
+    api_key_env: ""
+  zai:
+    openai_base_url: "https://api.z.ai/v1"
+    api_key_env: "ZAI_API_KEY"
+
+# -----------------------------------------------------------
+# JOB SEARCH PARAMETERS
+# -----------------------------------------------------------
+search:
+  locations:
+    - "Hannover"
+    - "Berlin"
+    - "Hamburg"
+    - "Munich"
+    - "Remote"
+    # Uncomment to also search Chinese platforms:
+    # - "上海"
+    # - "北京"
+    # - "深圳"
+  radius_km: 50
+  postal_code: "30159"
+  max_results_per_source: 50
+  max_days_old: 14
+  job_types:
+    - "fulltime"
+  # Override all CV-extracted roles with your own keywords:
+  # custom_keywords:
+  #   - "AI Engineer"
+  #   - "Machine Learning Engineer"
+  #   - "LLM Engineer"
+  #   - "大模型工程师"
+  custom_keywords: []
+
+# -----------------------------------------------------------
+# DATA SOURCES
+# -----------------------------------------------------------
+sources:
+  arbeitsagentur:
+    enabled: true
+
+  jobspy:
+    enabled: true
+    boards:
+      - "indeed"
+      - "glassdoor"   # added: Glassdoor DE listings
+      - "google"
+    country: "germany"
+
+  stepstone:
+    enabled: true
+    mcp_command: "python"
+    mcp_args: ["./mcp_servers/stepstone_server.py"]
+
+  linkedin:
+    enabled: false
+    adapter: "stickerdaniel"
+
+  xing:
+    enabled: false
+    adapter: "apify"
+
+  scrapegraph:
+    enabled: false
+    api_key_env: "SCRAPEGRAPH_API_KEY"
+
+  apify:
+    enabled: false
+    api_key_env: "APIFY_TOKEN"
+
+  # ── Chinese platforms ──────────────────────────────────────────
+  # BOSS直聘: set BOSSZHIPIN_COOKIES env var or memory/bosszhipin_cookies.json
+  # Extract cookies from Chrome: DevTools → Application → Cookies → zhipin.com
+  bosszhipin:
+    enabled: false
+    city_code: "101020100"   # 101010100=Beijing 101020100=Shanghai 101280600=Shenzhen
+    max_pages: 3
+    delay_between_requests: 2.0
+
+  # 拉勾网: first visit www.lagou.com once to get session cookies
+  lagou:
+    enabled: false
+    city_code: "101020100"
+    max_results_per_source: 50
+    delay_between_requests: 2.0
+
+  # 智联招聘: no auth required for basic searches
+  zhilian:
+    enabled: false
+    city_code: "538"   # 530=Beijing 538=Shanghai 765=Shenzhen
+
+# -----------------------------------------------------------
+# SCORING
+# -----------------------------------------------------------
+scoring:
+  min_score_digest: 6
+  min_score_application: 7
+  batch_size: 5
+  dimensions:
+    - skills_match
+    - seniority_fit
+    - location_fit
+    - language_fit
+    - visa_friendly
+    - growth_potential
+
+# -----------------------------------------------------------
+# OUTPUT
+# -----------------------------------------------------------
+output:
+  dir: "./outputs"
+  excel:
+    enabled: true
+    filename: "jobs_pipeline.xlsx"
+  digest:
+    enabled: true
+    dir: "digests"
+  applications:
+    enabled: true
+    dir: "applications"
+
+# -----------------------------------------------------------
+# RUNTIME
+# -----------------------------------------------------------
+runtime:
+  mode: "full"
+  log_level: "INFO"
+  cache_dir: "./memory"
+  skip_unchanged_cv: true
+# -----------------------------------------------------------
+# WEB UI
+# -----------------------------------------------------------
+web:
+  enabled: false  # Enable web UI (set to true to run web server)
+  host: "0.0.0.0"  # Bind address
+  port: 8000  # Port to listen on
+  upload_dir: "./users"  # Directory for user CV storage
+  max_file_size_mb: 10  # Maximum CV file size in MB
+  max_concurrent_jobs: 5  # Maximum concurrent job processes per user
+

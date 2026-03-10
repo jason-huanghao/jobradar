@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  jobhunter-cli:
+    build: .
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./cv:/app/cv
+      - ./outputs:/app/outputs
+    command: python -m src.main
+
+  jobhunter-web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./users:/app/users
+    command: python -m src.web.app
+
+# Optional: Redis for production deployment
+  redis:
+    image: redis:7
+    volumes:
+      - ./users:/data

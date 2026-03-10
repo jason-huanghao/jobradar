@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobHunter - Upload Your CV</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            overflow: hidden;
+        }
+
+        input[type="file"]::file-selector-button {
+            background: #667eea;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .progress-header {
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .status-message {
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .results-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .download-links {
+            display: flex;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        .download-link {
+            display: block;
+            padding: 12px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .download-link:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .success {
+            color: #28a745;
+            background: #d4edda;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 JobHunter AI</h1>
+        <p class="subtitle">
+            Upload your Markdown CV and let AI find the best jobs for you
+        </p>
+
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="userId">Your ID (email or username)</label>
+                <input
+                    type="text"
+                    id="userId"
+                    name="user_id"
+                    placeholder="your.email@example.com"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="cvFile">Upload CV (Markdown format)</label>
+                <div class="file-upload-wrapper">
+                    <input
+                        type="file"
+                        id="cvFile"
+                        name="file"
+                        accept=".md,.markdown"
+                        required
+                    >
+                </div>
+                <small style="color: #888; margin-top: 5px; display: block;">
+                    Maximum file size: 10MB
+                </small>
+            </div>
+
+            <button type="submit" id="uploadButton">
+                🚀 Upload & Process
+            </button>
+
+            <div id="messageArea"></div>
+        </form>
+
+        <div id="progressSection" class="progress-section">
+            <h3 class="progress-header" id="statusTitle">Processing...</h3>
+            <div class="status-message" id="statusMessage">
+                Initializing...
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <span id="progressText">0%</span>
+            </div>
+        </div>
+
+        <div id="resultsSection" class="results-section">
+            <h3 style="text-align: center; margin-bottom: 20px;">✅ Processing Complete!</h3>
+            <div id="resultsSummary" style="margin-bottom: 20px;"></div>
+            <div class="download-links">
+                <a id="englishExcel" class="download-link" href="#">
+                    📊 Download English Excel
+                </a>
+                <a id="chineseExcel" class="download-link" href="#">
+                    🇨🇳 Download Chinese Excel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let statusCheckInterval = null;
+
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('user_id', document.getElementById('userId').value);
+            formData.append('file', document.getElementById('cvFile').files[0]);
+
+            const uploadButton = document.getElementById('uploadButton');
+            uploadButton.disabled = true;
+            uploadButton.textContent = '⏳ Uploading...';
+
+            const messageArea = document.getElementById('messageArea');
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentJobId = data.job_id;
+                    showProgress();
+                    startStatusCheck();
+                } else {
+                    messageArea.innerHTML = `<div class="error">Error: ${data.detail || 'Upload failed'}</div>`;
+                    uploadButton.disabled = false;
+                    uploadButton.textContent = '🚀 Upload & Process';
+                }
+            } catch (error) {
+                messageArea.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                uploadButton.disabled = false;
+                uploadButton.textContent = '🚀 Upload & Process';
+            }
+        });
+
+        function showProgress() {
+            document.getElementById('uploadForm').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+        }
+
+        function showResults() {
+            document.getElementById('uploadForm').style.display = 'block';
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'block';
+            document.getElementById('uploadButton').disabled = false;
+            document.getElementById('uploadButton').textContent = '🚀 Upload & Process';
+        }
+
+        function updateProgress(progress, step) {
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = progress + '%';
+            document.getElementById('statusMessage').textContent = step;
+            document.getElementById('statusTitle').textContent = step;
+        }
+
+        async function startStatusCheck() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+
+            statusCheckInterval = setInterval(async function() {
+                try {
+                    const response = await fetch(`/api/status/${currentJobId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'completed') {
+                        clearInterval(statusCheckInterval);
+                        showResultsSummary(data.results);
+                        showResults();
+                        return;
+                    }
+
+                    if (data.status === 'failed') {
+                        clearInterval(statusCheckInterval);
+                        document.getElementById('statusMessage').innerHTML = 
+                            `<div class="error">Error: ${data.error || 'Processing failed'}</div>`;
+                        document.getElementById('uploadForm').style.display = 'block';
+                        document.getElementById('progressSection').style.display = 'none';
+                        return;
+                    }
+
+                    updateProgress(data.progress, data.current_step);
+                } catch (error) {
+                    console.error('Status check failed:', error);
+                }
+            }, 3000); // Check every 3 seconds
+        }
+
+        function showResultsSummary(results) {
+            if (!results) return;
+
+            const summaryHtml = `
+                <div style="text-align: center;">
+                    <div class="success" style="display: inline-block; margin-bottom: 10px;">
+                        🎉 Success!
+                    </div>
+                    <p style="font-size: 16px; margin: 10px 0;">
+                        <strong>${results.total_jobs || 0}</strong> jobs found
+                    </p>
+                    <p style="font-size: 14px; color: #666;">
+                        ${results.scored_jobs || 0} jobs scored with AI
+                    </p>
+                </div>
+            `;
+
+            document.getElementById('resultsSummary').innerHTML = summaryHtml;
+
+            // Update download links
+            const user_id = document.getElementById('userId').value;
+            document.getElementById('englishExcel').href = 
+                `/api/download/${currentJobId}/jobs_pipeline.xlsx`;
+            document.getElementById('chineseExcel').href = 
+                `/api/download/${currentJobId}/jobs_pipeline_cn.xlsx`;
+        }
+    </script>
+</body>
+</html>

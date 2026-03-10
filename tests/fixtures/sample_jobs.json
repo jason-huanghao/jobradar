@@ -1,0 +1,41 @@
+[
+  {
+    "id": "test-001",
+    "title": "AI Engineer",
+    "company": "TechCorp GmbH",
+    "location": "Berlin, Germany",
+    "url": "https://example.com/job/ai-engineer-berlin",
+    "description": "We are looking for an AI Engineer to join our team. You will work on NLP, knowledge graphs, and LLM-based applications. Requirements: Python, PyTorch, experience with RAG systems. German B1+ preferred.",
+    "source": "arbeitsagentur",
+    "date_posted": "2026-03-01",
+    "job_type": "fulltime",
+    "salary": "70000-85000 EUR",
+    "remote": false
+  },
+  {
+    "id": "test-002",
+    "title": "Machine Learning Researcher",
+    "company": "AutoML Labs",
+    "location": "Hannover, Germany",
+    "url": "https://example.com/job/ml-researcher-hannover",
+    "description": "Research position in causal machine learning. PhD preferred. Work on causal discovery, Bayesian networks, and knowledge graph integration. Publications track record required.",
+    "source": "jobspy:indeed",
+    "date_posted": "2026-02-28",
+    "job_type": "fulltime",
+    "salary": "",
+    "remote": true
+  },
+  {
+    "id": "test-003",
+    "title": "Frontend Developer",
+    "company": "WebShop AG",
+    "location": "Munich, Germany",
+    "url": "https://example.com/job/frontend-munich",
+    "description": "React/TypeScript frontend developer for e-commerce platform. 3+ years experience with React, Redux, and modern CSS.",
+    "source": "jobspy:google",
+    "date_posted": "2026-03-02",
+    "job_type": "fulltime",
+    "salary": "55000-65000 EUR",
+    "remote": false
+  }
+]

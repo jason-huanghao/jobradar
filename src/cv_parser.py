@@ -10,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 
-from .cv_reader import detect_cv_format, read_cv_file
+from .cv_reader import detect_cv_format, read_cv_auto, read_cv_file
 from .llm_client import LLMClient
 from .models import CandidateProfile
 
@@ -38,15 +38,23 @@ def _cv_hash(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()
 
 
-def read_cv(cv_path: Path) -> str:
-    """Read a CV file (Markdown, PDF, or Word) and return plain text.
+def read_cv(cv_path: Path | str) -> str:
+    """Read a CV from a local file path or a remote URL.
 
-    Delegates to cv_reader.read_cv_file() for format-aware extraction.
+    Accepts:
+        Path / str  — local file (.md, .pdf, .docx, .txt)
+        str         — http(s):// URL (HTML, PDF, Markdown, DOCX)
+
+    Delegates to cv_reader.read_cv_auto() for format-aware extraction.
     Kept as `read_cv` for backward compatibility with existing call sites.
     """
-    fmt = detect_cv_format(cv_path)
-    logger.info("Reading CV: %s (%s)", cv_path.name, fmt)
-    return read_cv_file(cv_path)
+    source = str(cv_path)
+    if source.startswith("http://") or source.startswith("https://"):
+        logger.info("Reading CV from URL: %s", source)
+    else:
+        fmt = detect_cv_format(Path(source))
+        logger.info("Reading CV: %s (%s)", Path(source).name, fmt)
+    return read_cv_auto(source)
 
 
 def parse_cv_to_profile(

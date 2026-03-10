@@ -285,8 +285,12 @@ def _collect_jobs(queries: list[SearchQuery], config: AppConfig) -> list[RawJob]
 def _parse_cv(
     config: AppConfig, llm: LLMClient, cache_dir: Path
 ) -> tuple[CandidateProfile, str]:
-    cv_path = config.resolve_path(config.candidate.cv_path)
-    cv_text = read_cv(cv_path)
+    # URL takes priority over local path
+    if config.candidate.cv_url:
+        cv_source = config.candidate.cv_url
+    else:
+        cv_source = config.resolve_path(config.candidate.cv_path)
+    cv_text = read_cv(cv_source)
     if config.candidate.profile_json_path:
         profile_path = config.resolve_path(config.candidate.profile_json_path)
         raw = json.loads(profile_path.read_text())
@@ -633,6 +637,12 @@ Examples:
     parser.add_argument("--uninstall-agent", action="store_true", help="Remove daily scheduler")
     parser.add_argument("--agent-hour", type=int, default=8, help="Hour to run agent (default: 8)")
 
+    # CV override
+    parser.add_argument(
+        "--cv", metavar="PATH_OR_URL",
+        help="CV to use: local file path OR http(s):// URL (HTML/PDF/MD/DOCX)",
+    )
+
     # Pipeline modes
     parser.add_argument("--config", type=str, help="Path to config.yaml")
     parser.add_argument(
@@ -702,6 +712,17 @@ Examples:
 
     if args.mode:
         config.runtime.mode = args.mode
+
+    # --cv flag overrides config.yaml cv_path / cv_url
+    if args.cv:
+        cv_arg = args.cv.strip()
+        if cv_arg.startswith("http://") or cv_arg.startswith("https://"):
+            config.candidate.cv_url = cv_arg
+            console.print(f"[dim]📄 CV source: {cv_arg} (URL)[/]")
+        else:
+            config.candidate.cv_url = ""
+            config.candidate.cv_path = cv_arg
+            console.print(f"[dim]📄 CV source: {cv_arg} (file)[/]")
 
     if config.runtime.mode == "quick":
         config.sources.stepstone.enabled = False

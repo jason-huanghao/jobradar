@@ -36,6 +36,7 @@ class LLMConfig(BaseModel):
 
 class CandidateConfig(BaseModel):
     cv_path: str = "./cv/cv_current.md"
+    cv_url: str = ""                      # Remote URL (overrides cv_path when set)
     profile_path: str = "./cv/profile.md"
     profile_json_path: str = ""
 

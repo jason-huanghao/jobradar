@@ -7,6 +7,12 @@
 # -----------------------------------------------------------
 candidate:
   cv_path: "./cv/cv_current.md"
+  # cv_url: ""   # Optional: remote URL takes priority over cv_path when set.
+  #              # Supports: HTML page, PDF, Markdown (.md), plain text, DOCX
+  #              # Examples:
+  #              #   cv_url: "https://mysite.com/cv.pdf"
+  #              #   cv_url: "https://raw.githubusercontent.com/you/repo/main/cv.md"
+  #              #   cv_url: "https://notion.so/your-exported-cv-page"
   profile_path: "./cv/profile.md"
   profile_json_path: ""
 

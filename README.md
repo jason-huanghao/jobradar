@@ -30,15 +30,16 @@
 1. [Features](#-features)
 2. [How It Works](#-how-it-works)
 3. [Quick Start](#-quick-start)
-4. [Job Sources](#-job-sources)
-5. [LLM Providers](#-llm-providers)
-6. [Configuration](#-configuration)
-7. [CLI Reference](#-cli-reference)
-8. [Scoring System](#-scoring-system)
-9. [Project Structure](#-project-structure)
-10. [Roadmap](#-roadmap)
-11. [Contributing](#-contributing)
-12. [Disclaimer](#-disclaimer)
+4. [Using with OpenClaw & Claude](#-using-with-openclaw--claude)
+5. [Job Sources](#-job-sources)
+6. [LLM Providers](#-llm-providers)
+7. [Configuration](#-configuration)
+8. [CLI Reference](#-cli-reference)
+9. [Scoring System](#-scoring-system)
+10. [Project Structure](#-project-structure)
+11. [Roadmap](#-roadmap)
+12. [Contributing](#-contributing)
+13. [Disclaimer](#-disclaimer)
 
 ---
 
@@ -120,6 +121,136 @@ jobradar --install-agent                # daily 8am automation
 
 > **Tip:** Run `jobradar --mode dry-run` first to preview the search queries without hitting any APIs.
 
+---
+
+## 🤖 Using with OpenClaw & Claude
+
+JobRadar is designed to be operated conversationally — you describe what you want, and the agent runs the right command. No YAML editing required.
+
+### Option A — OpenClaw
+
+Place the `jobradar/` folder in your OpenClaw skills directory. OpenClaw reads `SKILL.md` automatically and maps natural language to CLI calls.
+
+**First-time setup — one conversation, zero config files:**
+
+```
+You:  Set up JobRadar. My CV is at https://mysite.com/cv.pdf,
+      I want AI/ML jobs in Berlin and Hamburg,
+      and my OpenAI key is sk-xxxx
+```
+
+OpenClaw runs:
+```bash
+jobradar --init --cv https://mysite.com/cv.pdf \
+         --locations "Berlin,Hamburg,Remote" \
+         --llm openai --key sk-xxxx
+```
+
+This writes `config.yaml` and `.env` — no wizard, no manual editing.
+
+**Verify and run:**
+
+```
+You:  Check if JobRadar is ready
+```
+→ `jobradar --health --json` — checks LLM latency, source reachability, CV presence
+
+```
+You:  Find me AI jobs now
+```
+→ `jobradar --mode quick` (fast: 2 sources, ~3 min)
+
+```
+You:  Show me today's top matches
+```
+→ `jobradar --show-digest --json` — results presented inline
+
+```
+You:  What's in my job pool?
+```
+→ `jobradar --status --json`:
+```json
+{
+  "pool": { "total": 312, "scored": 298, "unscored": 14 },
+  "top_job": { "title": "ML Engineer", "company": "DeepL", "score": 8.4 },
+  "sources": { "arbeitsagentur": "enabled", "indeed": "enabled" }
+}
+```
+
+**Act on results:**
+
+| You say | Command |
+|---------|---------|
+| "Write a cover letter for DeepL" | `jobradar --generate-app "DeepL"` |
+| "I applied to Zalando" | `jobradar --mark-applied "Zalando"` |
+| "Why did Databricks score low?" | `jobradar --explain "Databricks"` |
+| "I liked that AMD role" | `jobradar --feedback "AMD liked"` |
+| "Set up daily search" | `jobradar --install-agent` |
+
+---
+
+### Option B — Claude Code
+
+Open the project directory in Claude Code. It reads `CLAUDE.md` automatically.
+
+```bash
+# In Claude Code terminal — set up and run
+jobradar --init --cv ./cv/cv_current.md --llm openai --key $OPENAI_API_KEY
+jobradar --health
+jobradar --mode quick
+```
+
+Or just ask naturally:
+```
+"My CV is at ~/Downloads/resume.pdf — set up JobRadar and find ML jobs in Munich"
+"Run my daily job search and show me the results"
+"Generate a cover letter for the Siemens job"
+```
+
+---
+
+### Option C — Claude (claude.ai + Desktop Commander or Filesystem MCP)
+
+With Desktop Commander or the Filesystem MCP connected:
+
+```
+"Set up JobRadar. CV URL: https://… OpenAI key: sk-…"
+```
+
+Claude runs `jobradar --init …` then `jobradar --health` to verify.
+
+Daily usage works the same as OpenClaw — just ask conversationally.
+
+---
+
+### Minimum config (13 lines)
+
+The `--init` command generates this automatically. Everything else is optional:
+
+```yaml
+candidate:
+  cv_url: "https://mysite.com/cv.pdf"   # or cv_path: "./cv/cv.md"
+
+llm:
+  text:
+    provider: "openai"
+    model: "gpt-4o-mini"
+    api_key_env: "OPENAI_API_KEY"
+
+search:
+  locations: ["Berlin", "Hamburg", "Remote"]
+
+sources:
+  arbeitsagentur: { enabled: true }
+  jobspy: { enabled: true, boards: ["indeed", "google"], country: "germany" }
+```
+
+`.env` file (same directory):
+```
+OPENAI_API_KEY=sk-your-key-here
+```
+
+> 📖 **Full guide:** [docs/GUIDE_OPENCLAW_CLAUDE.md](docs/GUIDE_OPENCLAW_CLAUDE.md)
 
 ---
 
@@ -224,10 +355,15 @@ Full annotated reference: [`config.example.yaml`](config.example.yaml)
 ## 🖥️ CLI Reference
 
 ```bash
-# ── Setup ─────────────────────────────────────────────────────────
+# ── First-time setup ──────────────────────────────────────────────
+jobradar --init                    # Non-interactive bootstrap (agent-friendly)
 jobradar --setup                   # Interactive setup wizard
 jobradar --install-agent           # Install launchd/cron at 8am
 jobradar --uninstall-agent         # Remove scheduled job
+
+# ── Inspect ───────────────────────────────────────────────────────
+jobradar --health [--json]         # Check LLM + source connectivity
+jobradar --status [--json]         # Pool stats + source readiness
 
 # ── Pipeline ──────────────────────────────────────────────────────
 jobradar                           # Full pipeline (crawl + score + output)
@@ -238,14 +374,17 @@ jobradar --crawl-only              # Crawl only (no scoring)
 jobradar --score-only              # Score unscored jobs + output
 jobradar --rerun-scoring           # Clear scores + re-score everything
 jobradar --parse-cv-only           # CV → JSON debug output
+jobradar --cv PATH_OR_URL          # Override CV for this run
 
-# ── Conversational (OpenClaw / Claude Code) ───────────────────────
-jobradar --show-digest             # Print today's top jobs
+# ── Conversational (OpenClaw / Claude) ───────────────────────────
+jobradar --show-digest [--json]    # Print today's top jobs
 jobradar --generate-app "AMD"      # Cover letter for AMD role
 jobradar --mark-applied "SAP"      # Mark SAP job as applied
 jobradar --explain "Databricks"    # Show LLM score breakdown
 jobradar --feedback "AMD liked"    # Record preference for future scoring
 ```
+
+> Add `--json` to `--status`, `--health`, or `--show-digest` for clean JSON output on stdout — all banners go to stderr so agents can parse results directly.
 
 ---
 
@@ -307,13 +446,16 @@ jobradar/
 
 ## 🗺️ Roadmap
 
+- [x] Parallel source crawling (ThreadPoolExecutor, 6 workers)
+- [x] `--status` / `--health` inspection commands
+- [x] `--init` non-interactive bootstrap for agents
+- [x] `--json` flag for machine-readable output
+- [x] Negative keyword & company filters
 - [ ] StepStone full scraper implementation
 - [ ] XING native adapter (no Apify)
-- [ ] Parallel source crawling with asyncio
-- [ ] `--status` summary command
 - [ ] `--preview-score` for prompt debugging
 - [ ] 前程无忧 (51job) CN source
-- [ ] Web UI (`pip install openclaw-jobradar[web]`)
+- [ ] MCP server mode (`jobradar serve`)
 - [ ] Docker one-liner deployment
 
 ---

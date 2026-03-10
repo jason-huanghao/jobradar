@@ -26,7 +26,7 @@
 
 | 💬 コミュニティ・フィードバック | ☕ プロジェクトを支援 |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101718363.png" width="160" alt="WeChat公式アカウント" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101748931.png" width="300" alt="WeChat Pay & Alipay" /> |
+| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="160" alt="WeChat公式アカウント" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101825487.png" width="300" alt="WeChat Pay & Alipay" /> |
 | WeChatをフォロー · フィードバック送信 | WeChat Pay · Alipay — ⭐でも大歓迎 |
 
 </div>

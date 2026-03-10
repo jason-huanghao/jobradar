@@ -27,7 +27,9 @@ import argparse
 import json
 import logging
 import re
+import socket
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -256,29 +258,63 @@ class JobPool:
 
 
 def _collect_jobs(queries: list[SearchQuery], config: AppConfig) -> list[RawJob]:
-    all_jobs: list[RawJob] = []
+    """Crawl all enabled sources in parallel using a thread pool.
+
+    Each (source, query) pair runs in its own thread, with a per-source
+    concurrency cap to avoid hammering any single platform.
+    """
+    # Build work units: [(source, query), ...]
+    work: list[tuple] = []
     for source in _ALL_SOURCES:
         if not source.is_enabled(config):
             continue
         source_queries = [q for q in queries if q.source.startswith(source.name)]
+        if not source_queries and source.name == "jobspy":
+            source_queries = [q for q in queries if q.source.startswith("jobspy")]
         if not source_queries:
-            source_queries = [
-                q for q in queries
-                if q.source.startswith("jobspy") and source.name == "jobspy"
-            ]
-            if not source_queries:
-                continue
-
-        console.print(f"\n[bold blue]🔍 {source.name}[/] — {len(source_queries)} queries")
+            continue
         for query in source_queries:
+            work.append((source, query))
+
+    if not work:
+        return []
+
+    # Status tracking
+    source_names = sorted({s.name for s, _ in work})
+    console.print(
+        f"\n[bold green]🌐 Crawling {len(source_names)} sources × "
+        f"{len(work)} queries (parallel)[/]"
+    )
+    for sn in source_names:
+        n = sum(1 for s, _ in work if s.name == sn)
+        console.print(f"  • {sn}: {n} queries")
+
+    all_jobs: list[RawJob] = []
+    errors: list[str] = []
+
+    # Thread pool — max 6 workers avoids overloading slow sources
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        future_to_work = {
+            executor.submit(source.search, query, config): (source, query)
+            for source, query in work
+        }
+        for future in as_completed(future_to_work):
+            source, query = future_to_work[future]
             try:
-                jobs = source.search(query, config)
+                jobs = future.result(timeout=45)
                 all_jobs.extend(jobs)
-                console.print(f"  ✅ '{query.keyword}' in '{query.location}': {len(jobs)} jobs")
+                if jobs:
+                    console.print(
+                        f"  ✅ [{source.name}] '{query.keyword}' "
+                        f"in '{query.location}': {len(jobs)} jobs"
+                    )
             except Exception as e:
-                console.print(
-                    f"  ❌ '{query.keyword}' in '{query.location}': {e}", style="red"
-                )
+                errors.append(f"[{source.name}] '{query.keyword}': {e}")
+
+    if errors:
+        for err in errors:
+            console.print(f"  ❌ {err}", style="red")
+
     return all_jobs
 
 
@@ -301,6 +337,33 @@ def _parse_cv(
             skip_if_unchanged=config.runtime.skip_unchanged_cv,
         )
     return profile, cv_text
+
+
+def _apply_negative_filters(jobs: list[RawJob], config: AppConfig) -> list[RawJob]:
+    """Drop jobs matching exclude_keywords or exclude_companies from config."""
+    excl_kw = [k.lower() for k in (config.search.exclude_keywords or [])]
+    excl_co = [c.lower() for c in (config.search.exclude_companies or [])]
+    if not excl_kw and not excl_co:
+        return jobs
+
+    kept: list[RawJob] = []
+    for job in jobs:
+        title = (job.title or "").lower()
+        desc = (job.description or "").lower()
+        company = (job.company or "").lower()
+
+        if excl_co and any(c in company for c in excl_co):
+            continue
+        if excl_kw and any(k in title or k in desc for k in excl_kw):
+            continue
+        kept.append(job)
+
+    removed = len(jobs) - len(kept)
+    if removed:
+        logging.getLogger(__name__).info(
+            "Negative filter: removed %d jobs (%d kept)", removed, len(kept)
+        )
+    return kept
 
 
 def run_crawl(config: AppConfig) -> tuple[JobPool, list[RawJob]]:
@@ -346,6 +409,10 @@ def run_crawl(config: AppConfig) -> tuple[JobPool, list[RawJob]]:
         f"  ✅ {len(unique_jobs)} unique "
         f"(removed {len(raw_jobs) - len(unique_jobs)} duplicates)"
     )
+
+    # Apply negative filters (free — no LLM needed)
+    unique_jobs = _apply_negative_filters(unique_jobs, config)
+    console.print(f"  🔍 After filters: {len(unique_jobs)} jobs")
 
     console.print("\n[bold green]💾 Step 5: Merge into job pool[/]")
     pool_before = pool.total_count
@@ -608,6 +675,216 @@ def cmd_explain(company: str, config: AppConfig) -> None:
     console.print(f"\n  🔗 {sj.job.url}")
 
 
+def cmd_status(config: AppConfig, as_json: bool = False) -> None:
+    """Show pool stats and source health at a glance."""
+    cache_dir = config.resolve_path(config.runtime.cache_dir)
+    pool = JobPool(cache_dir)
+    max_age = config.search.max_days_old or 30
+    all_scored = pool.get_all_scored(max_age_days=max_age)
+
+    # Top job
+    top = max(all_scored, key=lambda s: s.score, default=None)
+
+    # Applied count (last 7 days)
+    applied_recent = sum(
+        1 for s in all_scored if s.applied
+    )
+
+    # Source readiness
+    source_status: dict[str, str] = {}
+    for src_name in ["arbeitsagentur", "jobspy", "bosszhipin", "lagou", "zhilian"]:
+        cfg_src = getattr(config.sources, src_name, None)
+        if cfg_src and cfg_src.enabled:
+            source_status[src_name] = "enabled"
+        else:
+            source_status[src_name] = "disabled"
+    # Check BOSS直聘 cookie
+    if source_status.get("bosszhipin") == "enabled":
+        cookie_file = cache_dir / "bosszhipin_cookies.json"
+        has_cookie = bool(
+            __import__("os").getenv("BOSSZHIPIN_COOKIES") or cookie_file.exists()
+        )
+        source_status["bosszhipin"] = "ready" if has_cookie else "needs_cookie"
+
+    # Last run time
+    agent_log = cache_dir / "agent.log"
+    last_run = None
+    if agent_log.exists():
+        lines = agent_log.read_text().strip().split("\n")
+        for line in reversed(lines):
+            if "pipeline" in line.lower() or "done" in line.lower():
+                last_run = line[:19]
+                break
+
+    data = {
+        "pool": {
+            "total": pool.total_count,
+            "scored": pool.scored_count,
+            "unscored": pool.unscored_count,
+        },
+        "top_job": {
+            "title": top.job.title,
+            "company": top.job.company,
+            "score": round(top.score, 1),
+            "url": top.job.url,
+        } if top else None,
+        "applied_count": applied_recent,
+        "sources": source_status,
+        "last_run": last_run,
+    }
+
+    if as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+
+    console.print("\n[bold]📊 JobRadar Status[/]")
+    console.print(f"  Pool: {pool.total_count} total │ {pool.scored_count} scored │ {pool.unscored_count} unscored")
+    if top:
+        console.print(f"  ⭐  Top match: [bold]{top.score:.1f}[/] — {top.job.title} @ {top.job.company}")
+    if applied_recent:
+        console.print(f"  📬 Applied: {applied_recent} jobs")
+    if last_run:
+        console.print(f"  🕐 Last run: {last_run}")
+    console.print("  Sources:")
+    icons = {"enabled": "✅", "ready": "✅", "disabled": "⬜", "needs_cookie": "⚠️ (cookie missing)"}
+    for src, st in source_status.items():
+        console.print(f"    {icons.get(st, st)} {src}")
+
+
+def cmd_health(config: AppConfig, as_json: bool = False) -> dict:
+    """Check LLM connectivity, source reachability and config validity."""
+    results: dict[str, dict] = {}
+
+    # 1. LLM check
+    try:
+        t0 = time.time()
+        llm = LLMClient(config.llm.text)
+        llm.complete("Say OK", system="Reply with just OK.", temperature=0.0)
+        latency = int((time.time() - t0) * 1000)
+        results["llm"] = {"ok": True, "model": config.llm.text.model, "latency_ms": latency}
+    except Exception as e:
+        results["llm"] = {"ok": False, "error": str(e)[:80]}
+
+    # 2. Source reachability
+    sources_to_check = {
+        "arbeitsagentur": ("rest.arbeitsagentur.de", 443),
+        "indeed":         ("de.indeed.com", 443),
+        "glassdoor":      ("www.glassdoor.de", 443),
+        "bosszhipin":     ("www.zhipin.com", 443),
+        "zhilian":        ("fe-api.zhaopin.com", 443),
+    }
+    for name, (host, port) in sources_to_check.items():
+        try:
+            sock = socket.create_connection((host, port), timeout=3)
+            sock.close()
+            results[name] = {"ok": True}
+        except Exception:
+            results[name] = {"ok": False, "note": "unreachable (check network / VPN)"}
+
+    # 3. Config validity
+    cv_ok = False
+    cv_note = ""
+    if config.candidate.cv_url:
+        cv_ok = True
+        cv_note = f"URL: {config.candidate.cv_url}"
+    else:
+        cv_path = config.resolve_path(config.candidate.cv_path)
+        cv_ok = cv_path.exists()
+        cv_note = str(cv_path)
+    results["cv"] = {"ok": cv_ok, "source": cv_note}
+
+    # 4. BOSS直聘 cookie
+    cache_dir = config.resolve_path(config.runtime.cache_dir)
+    cookie_file = cache_dir / "bosszhipin_cookies.json"
+    has_cookie = bool(
+        __import__("os").getenv("BOSSZHIPIN_COOKIES") or cookie_file.exists()
+    )
+    results["bosszhipin_cookie"] = {"ok": has_cookie,
+                                    "note": "" if has_cookie else "Set BOSSZHIPIN_COOKIES env var"}
+
+    if as_json:
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        return results
+
+    console.print("\n[bold]🏥 JobRadar Health Check[/]")
+    for key, val in results.items():
+        icon = "✅" if val.get("ok") else "❌"
+        extra = val.get("note") or val.get("error") or val.get("model", "") or val.get("source", "")
+        latency = f" ({val['latency_ms']}ms)" if "latency_ms" in val else ""
+        console.print(f"  {icon} {key}{latency}" + (f"  [{extra}]" if extra else ""))
+
+    return results
+
+
+def cmd_init(
+    cv: str | None,
+    locations: str | None,
+    llm_provider: str | None,
+    api_key: str | None,
+    config_path: Path,
+) -> None:
+    """Non-interactive bootstrap — write config.yaml from CLI args.
+
+    Designed for agent-driven onboarding (no wizard prompts).
+    """
+    from .config import AppConfig, CandidateConfig, LLMEndpoint, LLMConfig, SearchConfig
+
+    # Provider → base_url + env_var mapping
+    _provider_map = {
+        "openai":      ("https://api.openai.com/v1",            "OPENAI_API_KEY",    "gpt-4o-mini"),
+        "deepseek":    ("https://api.deepseek.com/v1",          "DEEPSEEK_API_KEY",  "deepseek-chat"),
+        "volcengine":  ("https://ark.cn-beijing.volces.com/api/coding/v3", "ARK_API_KEY", "doubao-seed-2.0-code"),
+        "zai":         ("https://api.z.ai/v1",                  "ZAI_API_KEY",       "z-pro"),
+        "openrouter":  ("https://openrouter.ai/api/v1",         "OPENROUTER_API_KEY","openai/gpt-4o-mini"),
+        "ollama":      ("http://localhost:11434/v1",             "",                  "llama3"),
+    }
+
+    provider = (llm_provider or "openai").lower()
+    base_url, env_var, default_model = _provider_map.get(provider, _provider_map["openai"])
+
+    # Write API key to .env if provided
+    env_file = config_path.parent / ".env"
+    if api_key and env_var:
+        existing = env_file.read_text() if env_file.exists() else ""
+        if env_var not in existing:
+            with env_file.open("a") as f:
+                f.write(f"\n{env_var}={api_key}\n")
+        console.print(f"  📝 Wrote {env_var} to {env_file}")
+
+    location_list = [l.strip() for l in (locations or "Berlin,Remote").split(",")]
+
+    # Build minimal config
+    raw_cfg: dict = {
+        "candidate": {},
+        "llm": {
+            "text": {
+                "provider": provider,
+                "model": default_model,
+                "base_url": base_url,
+                "api_key_env": env_var,
+            }
+        },
+        "search": {"locations": location_list},
+        "sources": {"arbeitsagentur": {"enabled": True}, "jobspy": {"enabled": True, "boards": ["indeed", "google"], "country": "germany"}},
+    }
+    if cv:
+        if cv.startswith("http"):
+            raw_cfg["candidate"]["cv_url"] = cv
+        else:
+            raw_cfg["candidate"]["cv_path"] = cv
+
+    import yaml
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w") as f:
+        yaml.dump(raw_cfg, f, allow_unicode=True, sort_keys=False)
+
+    console.print(f"\n[bold green]✅ Config written: {config_path}[/]")
+    console.print(f"  CV: {cv or '(not set — add cv_path to config.yaml)'}")
+    console.print(f"  LLM: {provider} / {default_model}")
+    console.print(f"  Locations: {location_list}")
+    console.print(f"\n  Next: [bold]jobradar --health[/] to verify, then [bold]jobradar --mode quick[/]")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # CLI entry point
 # ═══════════════════════════════════════════════════════════════════
@@ -637,11 +914,29 @@ Examples:
     parser.add_argument("--uninstall-agent", action="store_true", help="Remove daily scheduler")
     parser.add_argument("--agent-hour", type=int, default=8, help="Hour to run agent (default: 8)")
 
+    # Non-interactive init (for agents / CI)
+    parser.add_argument("--init", action="store_true",
+                        help="Non-interactive bootstrap: write config.yaml from flags")
+    parser.add_argument("--locations", metavar="LOC1,LOC2",
+                        help="Comma-separated locations for --init (e.g. 'Berlin,Remote')")
+    parser.add_argument("--llm", metavar="PROVIDER",
+                        help="LLM provider for --init: openai|deepseek|volcengine|zai|openrouter|ollama")
+    parser.add_argument("--key", metavar="API_KEY",
+                        help="LLM API key for --init (written to .env)")
+
     # CV override
     parser.add_argument(
         "--cv", metavar="PATH_OR_URL",
         help="CV to use: local file path OR http(s):// URL (HTML/PDF/MD/DOCX)",
     )
+
+    # Status / health inspection (agent-friendly)
+    parser.add_argument("--status", action="store_true",
+                        help="Show pool stats and source readiness")
+    parser.add_argument("--health", action="store_true",
+                        help="Check LLM + source connectivity")
+    parser.add_argument("--json", action="store_true", dest="as_json",
+                        help="Output as JSON (for agent consumption)")
 
     # Pipeline modes
     parser.add_argument("--config", type=str, help="Path to config.yaml")
@@ -667,10 +962,33 @@ Examples:
 
     args = parser.parse_args()
 
+    # When --json is active, all non-JSON output must go to stderr
+    # so agents can cleanly parse stdout
+    global console
+    if args.as_json:
+        console = Console(stderr=True)
+        logging.basicConfig(level=logging.WARNING,
+                            format="%(message)s", handlers=[logging.StreamHandler()])
+
     # ── Setup wizard (no config needed) ──
     if args.setup:
         project_root = Path(__file__).parent.parent
         run_setup(project_root)
+        return
+
+    # ── Non-interactive init (for agents) ──
+    if args.init:
+        try:
+            config_path = find_config(args.config)
+        except FileNotFoundError:
+            config_path = Path("config.yaml")
+        cmd_init(
+            cv=args.cv,
+            locations=args.locations,
+            llm_provider=args.llm,
+            api_key=args.key,
+            config_path=config_path,
+        )
         return
 
     # ── Agent installer (no config needed) ──
@@ -734,6 +1052,14 @@ Examples:
     _setup_logging(config.runtime.log_level)
 
     # ── Conversational commands ──
+    if args.status:
+        cmd_status(config, as_json=args.as_json)
+        return
+
+    if args.health:
+        cmd_health(config, as_json=args.as_json)
+        return
+
     if args.show_digest:
         cmd_show_digest(config)
         return

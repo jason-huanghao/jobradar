@@ -51,6 +51,15 @@ class SearchConfig(BaseModel):
     max_days_old: int = 14
     job_types: list[str] = Field(default_factory=lambda: ["fulltime"])
     custom_keywords: list[str] = Field(default_factory=list)
+    # Negative filters — applied before LLM scoring (free, saves tokens)
+    exclude_keywords: list[str] = Field(
+        default_factory=lambda: ["Praktikum", "Werkstudent", "internship", "Ausbildung"],
+        description="Jobs whose title OR description contain any of these strings are dropped",
+    )
+    exclude_companies: list[str] = Field(
+        default_factory=list,
+        description="Companies to skip entirely (e.g. former employers)",
+    )
 
 
 class SourceConfig(BaseModel):

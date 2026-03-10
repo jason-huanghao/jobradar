@@ -98,6 +98,16 @@ search:
   #   - "大模型工程师"
   custom_keywords: []
 
+  # Negative filters — applied before LLM scoring (free, saves tokens)
+  # Drop jobs whose TITLE or DESCRIPTION contain any of these (case-insensitive)
+  exclude_keywords:
+    - "Praktikum"
+    - "Werkstudent"
+    - "internship"
+    - "Ausbildung"
+  # Skip these companies entirely (e.g. former employer, companies you've already applied to)
+  exclude_companies: []
+
 # -----------------------------------------------------------
 # DATA SOURCES
 # -----------------------------------------------------------

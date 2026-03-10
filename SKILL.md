@@ -22,62 +22,75 @@ When a user says one of these, run the corresponding command:
 
 | User says | Run |
 |-----------|-----|
+| "set up JobRadar" / "configure for me" | `jobradar --init --cv … --llm … --key …` |
+| "is JobRadar ready?" / "check setup" | `jobradar --health --json` |
+| "what's in my job pool?" / "show me the status" | `jobradar --status --json` |
 | "find new jobs" / "search now" / "run job search" | `jobradar --update` |
-| "show today's top jobs" / "what are my best matches?" | `jobradar --show-digest` |
+| "quick test" / "test quickly" | `jobradar --mode quick` |
+| "show today's top jobs" / "what are my best matches?" | `jobradar --show-digest --json` |
 | "write cover letter for [company]" | `jobradar --generate-app "[company]"` |
 | "explain score for [company]" / "why did I score low on [X]?" | `jobradar --explain "[company]"` |
 | "mark [company] as applied" | `jobradar --mark-applied "[company]"` |
 | "I liked [X]" / "not interested in [Y]" | `jobradar --feedback "[X] liked" "[Y] not_interested"` |
 | "run full pipeline" | `jobradar` |
 | "set up daily search" / "install agent" | `jobradar --install-agent` |
-| "test quickly" | `jobradar --mode quick` |
 
 **Feedback actions:** `liked`, `not_interested`, `applied`, `preferred`, `avoided`
+
+**Agent pattern for first-time setup:**
+1. Call `jobradar --init --cv <cv> --llm <provider> --key <key> --locations <locs>`
+2. Call `jobradar --health --json` → verify all green
+3. Call `jobradar --mode quick` → first run
+4. Call `jobradar --show-digest --json` → present results to user
 
 ---
 
 ## Platform Install Instructions
 
-### OpenClaw / Opencode (oh-my-openagent)
+> 📖 **Full guide:** [docs/GUIDE_OPENCLAW_CLAUDE.md](docs/GUIDE_OPENCLAW_CLAUDE.md)
 
-Place this project in your skills directory and OpenClaw will auto-detect it
-via this SKILL.md. The conversational command table above is read directly
-by the agent to dispatch commands.
+### Quick bootstrap (no config editing needed)
 
 ```bash
-# Verify install
-jobradar --setup     # first-time config
-jobradar --mode quick  # test run
+# Agent-driven one-liner — no wizard, no YAML editing
+jobradar --init \
+  --cv https://mysite.com/cv.pdf \
+  --locations "Berlin,Remote" \
+  --llm openai \
+  --key $OPENAI_API_KEY
+jobradar --health --json   # verify (returns JSON agents can parse)
+jobradar --mode quick      # first test run
 ```
+
+### OpenClaw / Opencode (oh-my-openagent)
+
+Place this project in your OpenClaw skills directory. OpenClaw auto-detects it
+via this SKILL.md and maps the conversational commands table to CLI calls.
 
 ### Claude Code
 
-Claude Code reads `CLAUDE.md` in the project root for project instructions.
-Open the project directory in Claude Code and all commands work directly.
+Open the project directory in Claude Code. It reads `CLAUDE.md` automatically.
 
 ```bash
 # In Claude Code terminal:
-jobradar --setup
+jobradar --init --cv ./cv.md --llm openai --key $OPENAI_API_KEY
+jobradar --health
 jobradar --update
 ```
 
 ### Claude (claude.ai)
 
-Use the MCP filesystem tool or paste the project path. Claude can invoke
-all commands via the bash tool or by asking the user to run them.
-
-### Opencode
-
-Same as OpenClaw — oh-my-openagent compatible. Uses this SKILL.md directly.
+With Desktop Commander or Filesystem MCP connected, Claude can run all
+`jobradar` commands from the terminal on your behalf.
 
 ### Standalone CLI
 
 ```bash
-git clone <repo> && cd jobradar
+git clone https://github.com/jason-huanghao/jobradar.git && cd jobradar
 pip install -e .
-jobradar --setup       # interactive wizard: provider + API key + CV path
-jobradar --mode quick  # test with 2 sources
-jobradar               # full pipeline
+jobradar --init --cv ./cv.md --llm openai --key $OPENAI_API_KEY
+jobradar --health
+jobradar --mode quick
 jobradar --install-agent  # daily 8am automation (macOS/Linux)
 ```
 
@@ -88,12 +101,15 @@ jobradar --install-agent  # daily 8am automation (macOS/Linux)
 ### Key commands
 
 ```bash
-jobradar --setup                    # First-time setup wizard
+jobradar --init                     # Non-interactive bootstrap (agent-friendly)
+jobradar --setup                    # Interactive setup wizard
+jobradar --health [--json]          # Check LLM + source connectivity
+jobradar --status [--json]          # Pool stats + source readiness
 jobradar                            # Full pipeline (crawl + score + output)
 jobradar --update                   # Incremental (new jobs only) + email
 jobradar --mode quick               # Fast test: BA + Indeed only
 jobradar --mode dry-run             # Show queries only, don't run
-jobradar --show-digest              # Print today's digest to terminal
+jobradar --show-digest [--json]     # Print today's digest
 jobradar --generate-app "AMD"       # Cover letter for AMD job
 jobradar --mark-applied "SAP"       # Mark SAP as applied
 jobradar --explain "Databricks"     # Score breakdown for Databricks
@@ -102,6 +118,7 @@ jobradar --install-agent            # Install daily 8am cron/launchd
 jobradar --uninstall-agent          # Remove scheduler
 jobradar --rerun-scoring            # Clear + re-score all jobs
 jobradar --parse-cv-only            # Parse CV → JSON
+jobradar --cv PATH_OR_URL           # Override CV for this run
 ```
 
 ### Key file paths

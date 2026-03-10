@@ -29,7 +29,7 @@
 
 | 💬 交流与反馈 | ☕ 支持项目 |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101718363.png" width="160" alt="微信公众号" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101748931.png" width="300" alt="微信支付 & 支付宝" /> |
+| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="160" alt="微信公众号" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="300" alt="微信支付 & 支付宝" /> |
 | 扫码关注微信公众号 · 留言反馈 | 微信支付 · 支付宝 — 没有压力，点个 ⭐ 同样是支持 |
 
 </div>

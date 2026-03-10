@@ -29,7 +29,7 @@
 
 | 💬 Community & Feedback | ☕ Support This Project |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101718363.png" width="160" alt="WeChat Public Account" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101748931.png" width="300" alt="WeChat Pay & Alipay" /> |
+| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="160" alt="WeChat Public Account" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="300" alt="WeChat Pay & Alipay" /> |
 | Follow on WeChat for updates · send feedback directly | WeChat Pay · Alipay — no pressure, stars count too ⭐ |
 
 </div>

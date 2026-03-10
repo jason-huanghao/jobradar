@@ -26,7 +26,7 @@
 
 | 💬 Communauté & Feedback | ☕ Soutenir le projet |
 |:---:|:---:|
-| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="160" alt="WeChat Account" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101825487.png" width="300" alt="WeChat Pay & Alipay" /> |
+| <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101827472.png" width="300" alt="WeChat Account" /> | <img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101825487.png" width="300" alt="WeChat Pay & Alipay" /> |
 | Suivre sur WeChat · Envoyer des retours | WeChat Pay · Alipay — ou simplement ⭐ |
 
 </div>

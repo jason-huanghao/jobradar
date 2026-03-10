@@ -39,7 +39,9 @@
 10. [Project Structure](#-project-structure)
 11. [Roadmap](#-roadmap)
 12. [Contributing](#-contributing)
-13. [Disclaimer](#-disclaimer)
+13. [Community & Feedback](#-community--feedback)
+14. [Support This Project](#-support-this-project)
+15. [Disclaimer](#-disclaimer)
 
 ---
 
@@ -485,6 +487,34 @@ The web scraping functionality in this project is intended **only for personal j
 - Do not use this tool for bulk commercial data collection or redistribution  
 - Users are solely responsible for any legal consequences arising from their use
 - This project has no affiliation with any of the job platforms listed
+
+---
+
+## 💬 Community & Feedback
+
+Found a bug, have a feature request, or just want to share that you landed a job with JobRadar?
+
+**WeChat Public Account** — follow for updates, tips, and to leave feedback directly:
+
+<div align="center">
+<img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101718363.png" width="200" alt="WeChat Public Account" />
+<br/><em>Scan to follow · Send a message to leave feedback</em>
+</div>
+
+You're also welcome to open a [GitHub Issue](https://github.com/jason-huanghao/jobradar/issues) or start a [Discussion](https://github.com/jason-huanghao/jobradar/discussions).
+
+---
+
+## ☕ Support This Project
+
+JobRadar is free and open-source. If it saved you time or helped you land interviews, a small token of appreciation keeps the project going — covering server costs, API fees for testing, and late-night coffee.
+
+<div align="center">
+<img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101748931.png" width="360" alt="WeChat Pay & Alipay" />
+<br/><em>WeChat Pay &nbsp;·&nbsp; Alipay</em>
+</div>
+
+No pressure at all — starring the repo and sharing it with a friend who's job hunting means just as much. 🌟
 
 ---
 

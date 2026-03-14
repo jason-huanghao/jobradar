@@ -1,216 +1,110 @@
-# ============================================================
-# OpenClaw JobRadar Agent — Configuration
-# ============================================================
+# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar v2 — config.example.yaml
+# Copy to config.yaml and fill in your values.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# -----------------------------------------------------------
-# CANDIDATE
-# -----------------------------------------------------------
-candidate:
-  cv_path: "./cv/cv_current.md"
-  # cv_url: ""   # Optional: remote URL takes priority over cv_path when set.
-  #              # Supports: HTML page, PDF, Markdown (.md), plain text, DOCX
-  #              # Examples:
-  #              #   cv_url: "https://mysite.com/cv.pdf"
-  #              #   cv_url: "https://raw.githubusercontent.com/you/repo/main/cv.md"
-  #              #   cv_url: "https://notion.so/your-exported-cv-page"
-  profile_path: "./cv/profile.md"
-  profile_json_path: ""
-
-# -----------------------------------------------------------
-# LLM CONFIGURATION
-# -----------------------------------------------------------
+# ── LLM ───────────────────────────────────────────────────────────────────────
 llm:
   text:
-    provider: "volcengine"
-    model: "doubao-seed-2.0-code"
-    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
-    api_key_env: "ARK_API_KEY"
-    temperature: 0.3
-    max_tokens: 4096
+    # Provider priority: env vars are checked first (see .env.example)
+    # Supported: volcengine | openai | deepseek | ollama | lm_studio | z_ai
+    provider: volcengine              # or: openai, deepseek, ollama, z_ai
+    model: doubao-seed-2.0-code       # model name for the provider above
+    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
+    api_key: ""                       # leave blank — use env var ARK_API_KEY
+    timeout: 120
+    max_retries: 3
+    temperature: 0.1
 
-  vision:
-    provider: "volcengine"
-    model: "doubao-seed-2.0-code"
-    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
-    api_key_env: "ARK_API_KEY"
+# ── Candidate ─────────────────────────────────────────────────────────────────
+candidate:
+  # Point to your CV. Supports .md, .txt, .pdf, .docx
+  cv_path: ./cv/cv_current.md
+  # Or: cv_url: https://example.com/myresume.pdf
 
-  embedding:
-    provider: "volcengine"
-    model: "doubao-embedding"
-    base_url: "https://ark.cn-beijing.volces.com/api/v3"
-    api_key_env: "ARK_API_KEY"
-
-# -----------------------------------------------------------
-# PROVIDER PRESETS
-# -----------------------------------------------------------
-provider_presets:
-  volcengine:
-    openai_base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"
-    anthropic_base_url: "https://ark.cn-beijing.volces.com/api/coding"
-    api_key_env: "ARK_API_KEY"
-    models:
-      - doubao-seed-2.0-code
-      - doubao-seed-code
-      - glm-4.7
-      - deepseek-v3.2
-      - kimi-k2.5
-  openai:
-    openai_base_url: "https://api.openai.com/v1"
-    api_key_env: "OPENAI_API_KEY"
-  deepseek:
-    openai_base_url: "https://api.deepseek.com/v1"
-    api_key_env: "DEEPSEEK_API_KEY"
-  openrouter:
-    openai_base_url: "https://openrouter.ai/api/v1"
-    api_key_env: "OPENROUTER_API_KEY"
-  ollama:
-    openai_base_url: "http://localhost:11434/v1"
-    api_key_env: ""
-  zai:
-    openai_base_url: "https://api.z.ai/v1"
-    api_key_env: "ZAI_API_KEY"
-
-# -----------------------------------------------------------
-# JOB SEARCH PARAMETERS
-# -----------------------------------------------------------
+# ── Search ────────────────────────────────────────────────────────────────────
 search:
+  # Comma-separated city names or "Remote"
   locations:
-    - "Hannover"
-    - "Berlin"
-    - "Hamburg"
-    - "Munich"
-    - "Remote"
-    # Uncomment to also search Chinese platforms:
-    # - "上海"
-    # - "北京"
-    # - "深圳"
-  radius_km: 50
-  postal_code: "30159"
-  max_results_per_source: 50
-  max_days_old: 14
-  job_types:
-    - "fulltime"
-  # Override all CV-extracted roles with your own keywords:
-  # custom_keywords:
-  #   - "AI Engineer"
-  #   - "Machine Learning Engineer"
-  #   - "LLM Engineer"
-  #   - "大模型工程师"
-  custom_keywords: []
+    - Hannover
+    - Berlin
+    - Hamburg
+    - Remote
 
-  # Negative filters — applied before LLM scoring (free, saves tokens)
-  # Drop jobs whose TITLE or DESCRIPTION contain any of these (case-insensitive)
+  # Only jobs posted within this many days
+  max_days_old: 30
+
+  # Keyword radius for location-based sources (km)
+  radius_km: 50
+
+  # Max results per source per keyword — keep it reasonable (20–100)
+  max_results_per_source: 50
+
+  # Optional: override profile-derived keywords entirely
+  # custom_keywords: []
+
+  # Optional: your postal code (for StepStone)
+  postal_code: ""
+
+  # Jobs whose title or description contains these strings are dropped
+  # before LLM scoring (case-insensitive)
   exclude_keywords:
-    - "Praktikum"
-    - "Werkstudent"
-    - "internship"
-    - "Ausbildung"
-  # Skip these companies entirely (e.g. former employer, companies you've already applied to)
+    - "Senior Principal"
+    - Praktikum
+    - Werkstudent
+    - Ausbildung
+
+  # Companies to skip entirely (exact match, case-insensitive)
   exclude_companies: []
 
-# -----------------------------------------------------------
-# DATA SOURCES
-# -----------------------------------------------------------
+# ── Sources ───────────────────────────────────────────────────────────────────
 sources:
   arbeitsagentur:
     enabled: true
 
   jobspy:
     enabled: true
+    # Supported boards: indeed, google, glassdoor, linkedin (PDF only)
     boards:
-      - "indeed"
-      - "glassdoor"   # added: Glassdoor DE listings
-      - "google"
-    country: "germany"
+      - indeed
+      - google
+    country: germany   # used for Indeed country filter
 
   stepstone:
-    enabled: true
-    mcp_command: "python"
-    mcp_args: ["./mcp_servers/stepstone_server.py"]
-
-  linkedin:
-    enabled: false
-    adapter: "stickerdaniel"
+    enabled: false     # stub — not yet implemented
 
   xing:
-    enabled: false
-    adapter: "apify"
+    enabled: false     # stub — not yet implemented
 
-  scrapegraph:
-    enabled: false
-    api_key_env: "SCRAPEGRAPH_API_KEY"
-
-  apify:
-    enabled: false
-    api_key_env: "APIFY_TOKEN"
-
-  # ── Chinese platforms ──────────────────────────────────────────
-  # BOSS直聘: set BOSSZHIPIN_COOKIES env var or memory/bosszhipin_cookies.json
-  # Extract cookies from Chrome: DevTools → Application → Cookies → zhipin.com
+  # ── Chinese platforms (only useful if you're targeting CN roles) ──────────
   bosszhipin:
     enabled: false
-    city_code: "101020100"   # 101010100=Beijing 101020100=Shanghai 101280600=Shenzhen
-    max_pages: 3
-    delay_between_requests: 2.0
+    # Set BOSSZHIPIN_COOKIES env var, or place cookies in memory/bosszhipin_cookies.json
+    delay_between_requests: 2.0  # seconds between page requests
 
-  # 拉勾网: first visit www.lagou.com once to get session cookies
   lagou:
     enabled: false
-    city_code: "101020100"
-    max_results_per_source: 50
     delay_between_requests: 2.0
 
-  # 智联招聘: no auth required for basic searches
   zhilian:
     enabled: false
-    city_code: "538"   # 530=Beijing 538=Shanghai 765=Shenzhen
 
-# -----------------------------------------------------------
-# SCORING
-# -----------------------------------------------------------
+# ── Scoring ───────────────────────────────────────────────────────────────────
 scoring:
-  min_score_digest: 6
-  min_score_application: 7
+  # LLM batch size per API call (5 is a good balance)
   batch_size: 5
-  dimensions:
-    - skills_match
-    - seniority_fit
-    - location_fit
-    - language_fit
-    - visa_friendly
-    - growth_potential
 
-# -----------------------------------------------------------
-# OUTPUT
-# -----------------------------------------------------------
-output:
-  dir: "./outputs"
-  excel:
-    enabled: true
-    filename: "jobs_pipeline.xlsx"
-  digest:
-    enabled: true
-    dir: "digests"
-  applications:
-    enabled: true
-    dir: "applications"
+  # Jobs scoring at or above this threshold get CV + cover letter generated
+  min_score_application: 7.0
 
-# -----------------------------------------------------------
-# RUNTIME
-# -----------------------------------------------------------
-runtime:
-  mode: "full"
-  log_level: "INFO"
-  cache_dir: "./memory"
-  skip_unchanged_cv: true
-# -----------------------------------------------------------
-# WEB UI
-# -----------------------------------------------------------
-web:
-  enabled: false  # Enable web UI (set to true to run web server)
-  host: "0.0.0.0"  # Bind address
-  port: 8000  # Port to listen on
-  upload_dir: "./users"  # Directory for user CV storage
-  max_file_size_mb: 10  # Maximum CV file size in MB
-  max_concurrent_jobs: 5  # Maximum concurrent job processes per user
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  host: 127.0.0.1
+  port: 7842
+  open_browser: true
 
+  # SQLite database path (relative to config.yaml location)
+  db_path: ./data/jobradar.db
+
+  # Cache directory for parsed profiles and intermediate files
+  cache_dir: ./data/cache

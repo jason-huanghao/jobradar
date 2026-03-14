@@ -1,49 +1,54 @@
-# ── User data (never commit) ───────────────────────────────────────
-cv/
-memory/
-outputs/
-.env
-*.env
-
-# ── Python ────────────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
 *.so
-.Python
-build/
-dist/
+*.egg
 *.egg-info/
+dist/
+build/
 .eggs/
+
+# Virtual environments
 .venv/
 venv/
 env/
-pip-wheel-metadata/
+ENV/
 
-# ── Testing ───────────────────────────────────────────────────────
+# Secrets & local config
+.env
+*.key
+*.pem
+
+# Data & runtime files
+data/
+*.db
+*.sqlite
+memory/
+/outputs/
+
+# CV files (personal)
+cv/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+*.err
+
+# Pytest / coverage
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
 
-# ── IDE ───────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# ── Stale artefacts ───────────────────────────────────────────────
-docs/stale/
-*.bak
-.ruff_cache/
-
-# ── Runtime / secrets ────────────────────────────────────────────
-config.yaml
-*.json.bak
-bosszhipin_cookies.json
-
-# ── Keep examples / placeholders ─────────────────────────────────
-!config.example.yaml
-!cv/.gitkeep
+# Build
+*.whl

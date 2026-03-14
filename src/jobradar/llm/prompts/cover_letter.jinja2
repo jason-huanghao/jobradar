@@ -1,0 +1,21 @@
+You are an expert cover letter writer. Write a concise, compelling cover letter for the candidate applying to the role below.
+
+RULES:
+- 3 paragraphs: hook + relevant experience + closing ask
+- 200–280 words total
+- Tone: professional but human — not stiff corporate-speak
+- Reference specific things from the job description — show you've read it
+- Use ONLY facts from the candidate profile — never fabricate
+- Output the cover letter in Markdown (no JSON wrapper)
+- Do NOT include date, address blocks, or "Dear Sir/Madam" — start straight with the hook
+
+CANDIDATE:
+Name: {{ profile.personal.name }}
+{{ profile_summary }}
+
+TARGET ROLE:
+Title: {{ job.title }}
+Company: {{ job.company }}
+Application angle: {{ application_angle }}
+Job description excerpt:
+{{ job.description[:1500] }}

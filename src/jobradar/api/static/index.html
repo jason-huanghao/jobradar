@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobRadar</title>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2d3148; --accent: #4f8ef7; --accent2: #7c5cbf;
+    --green: #3ecf8e; --yellow: #f5a623; --red: #e05c5c;
+    --text: #e8eaf0; --muted: #7b82a0; --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .shell { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 220px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 12px; gap: 4px; }
+  .main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+  /* Sidebar nav */
+  .logo { font-size: 18px; font-weight: 700; color: var(--accent); padding: 0 8px 20px; letter-spacing: -0.5px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 7px; cursor: pointer; color: var(--muted); font-weight: 500; transition: all .15s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface2); color: var(--accent); }
+  .nav-icon { width: 18px; text-align: center; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  /* Score badge */
+  .score { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .score-high { background: rgba(62,207,142,.15); color: var(--green); }
+  .score-mid  { background: rgba(245,166,35,.15); color: var(--yellow); }
+  .score-low  { background: rgba(224,92,92,.15); color: var(--red); }
+
+  /* Job row */
+  .job-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; border-radius: 7px; padding-left: 8px; }
+  .job-row:hover { background: var(--surface2); }
+  .job-row:last-child { border-bottom: none; }
+  .job-info { flex: 1; min-width: 0; }
+  .job-title { font-weight: 600; font-size: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-meta { color: var(--muted); font-size: 13px; margin-top: 3px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .tag { background: var(--surface2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+
+  /* Bars */
+  .dim-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+  .dim-label { width: 130px; font-size: 13px; color: var(--muted); text-align: right; }
+  .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width .4s; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-green { background: var(--green); color: #0f1117; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+  /* Pipeline status */
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-yellow { background: var(--yellow); animation: pulse 1s infinite; }
+  .dot-red { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Progress log */
+  .log-box { background: #0a0c12; border: 1px solid var(--border); border-radius: 7px; padding: 12px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+  .log-line { color: var(--muted); line-height: 1.7; }
+  .log-line.ok { color: var(--green); }
+  .log-line.err { color: var(--red); }
+
+  /* Detail panel */
+  .detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 480px; background: var(--surface); border-left: 1px solid var(--border); padding: 24px; overflow-y: auto; z-index: 100; transform: translateX(100%); transition: transform .25s; }
+  .detail-panel.open { transform: translateX(0); }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 99; }
+
+  /* Misc */
+  .stat { text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 20px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-size: 18px; font-weight: 700; }
+  .filter-row { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+  input[type=range] { accent-color: var(--accent); }
+  select, input[type=text] { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 7px; font-size: 13px; outline: none; }
+  select:focus, input[type=text]:focus { border-color: var(--accent); }
+  .md-content { line-height: 1.7; }
+  .md-content h2 { color: var(--accent); margin: 14px 0 6px; font-size: 15px; }
+  .md-content h3 { color: var(--text); margin: 10px 0 4px; font-size: 14px; }
+  .md-content p { color: var(--muted); margin-bottom: 8px; }
+  .md-content ul { padding-left: 18px; color: var(--muted); }
+  .md-content li { margin-bottom: 3px; }
+  pre { background: #0a0c12; padding: 12px; border-radius: 7px; overflow-x: auto; font-size: 12px; }
+</style>
+</head>
+
+<body x-data="app()" x-init="init()">
+<div class="shell">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="logo">⚡ JobRadar</div>
+    <div class="nav-item" :class="{active: page==='dashboard'}" @click="page='dashboard'">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" :class="{active: page==='jobs'}" @click="page='jobs'; loadJobs()">
+      <span class="nav-icon">💼</span> Jobs
+    </div>
+    <div class="nav-item" :class="{active: page==='pipeline'}" @click="page='pipeline'">
+      <span class="nav-icon">⚙️</span> Pipeline
+    </div>
+    <div class="nav-item" :class="{active: page==='profile'}" @click="page='profile'; loadProfile()">
+      <span class="nav-icon">👤</span> Profile
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── Dashboard ─────────────────────────────────────────── -->
+    <div x-show="page==='dashboard'">
+      <div class="section-header">
+        <div class="section-title">Dashboard</div>
+        <button class="btn btn-primary" @click="page='pipeline'">▶ Run Pipeline</button>
+      </div>
+
+      <div class="grid-3">
+        <div class="card stat"><div class="stat-num" x-text="stats.total_jobs || '—'"></div><div class="stat-label">Jobs in DB</div></div>
+        <div class="card stat"><div class="stat-num" x-text="stats.scored_jobs || '—'"></div><div class="stat-label">Scored</div></div>
+        <div class="card stat"><div class="stat-num" x-text="stats.top_matches || '—'"></div><div class="stat-label">Score ≥ 7</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Top Matches</div>
+        <template x-for="job in topJobs" :key="job.id">
+          <div class="job-row" @click="openDetail(job)">
+            <div :class="'score ' + scoreClass(job.score)" x-text="job.score.toFixed(1)"></div>
+            <div class="job-info">
+              <div class="job-title" x-text="job.title"></div>
+              <div class="job-meta">
+                <span x-text="job.company"></span>
+                <span x-text="job.location"></span>
+                <span class="tag" x-text="job.source"></span>
+                <span x-show="job.salary" x-text="job.salary"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="topJobs.length===0" style="color:var(--muted);padding:20px 0;text-align:center">
+          No scored jobs yet. Run the pipeline to get started.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Jobs ──────────────────────────────────────────────── -->
+    <div x-show="page==='jobs'">
+      <div class="section-header">
+        <div class="section-title">Jobs <span style="font-size:14px;color:var(--muted)" x-text="'(' + filteredJobs.length + ')'"></span></div>
+        <div style="display:flex;gap:8px">
+          <a :href="'/api/outputs/excel'" class="btn btn-secondary btn-sm">⬇ Excel</a>
+          <a :href="'/api/outputs/digest'" target="_blank" class="btn btn-secondary btn-sm">📄 Digest</a>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <label style="color:var(--muted);font-size:13px">Min score:
+          <input type="range" min="0" max="10" step="0.5" x-model="filters.minScore" style="vertical-align:middle;width:100px">
+          <span x-text="filters.minScore"></span>
+        </label>
+        <select x-model="filters.source">
+          <option value="">All sources</option>
+          <option value="arbeitsagentur">Arbeitsagentur</option>
+          <option value="jobspy:indeed">Indeed</option>
+          <option value="jobspy:google">Google Jobs</option>
+          <option value="bosszhipin">BOSS直聘</option>
+          <option value="lagou">拉勾</option>
+          <option value="zhilian">智联</option>
+        </select>
+        <select x-model="filters.status">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="interested">Interested</option>
+          <option value="applied">Applied</option>
+          <option value="rejected">Rejected</option>
+          <option value="interview">Interview</option>
+        </select>
+        <input type="text" placeholder="Search title/company…" x-model="filters.search" style="flex:1;min-width:180px">
+      </div>
+
+      <div class="card" style="padding:0">
+        <template x-for="job in filteredJobs" :key="job.id">
+          <div class="job-row" style="padding:14px 16px" @click="openDetail(job)">
+            <div :class="'score ' + scoreClass(job.score)" x-text="job.score.toFixed(1)"></div>
+            <div class="job-info">
+              <div class="job-title" x-text="job.title"></div>
+              <div class="job-meta">
+                <span x-text="job.company"></span>
+                <span x-text="job.location"></span>
+                <span class="tag" x-text="job.source"></span>
+                <span x-show="job.salary" x-text="job.salary"></span>
+                <span class="tag" x-show="job.status!=='new'" x-text="job.status"
+                  :style="job.status==='applied'?'border-color:var(--green);color:var(--green)':''"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <div x-show="filteredJobs.length===0" style="color:var(--muted);padding:30px;text-align:center">
+          No jobs match the current filters.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Pipeline ──────────────────────────────────────────── -->
+    <div x-show="page==='pipeline'">
+      <div class="section-header"><div class="section-title">Pipeline</div></div>
+
+      <div class="card">
+        <div class="card-title">Run Pipeline</div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <template x-for="m in ['full','quick','score-only','dry-run']" :key="m">
+            <button class="btn" :class="pipeMode===m?'btn-primary':'btn-secondary'" @click="pipeMode=m" x-text="m"></button>
+          </template>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-green" @click="runPipeline()" :disabled="pipeRunning">
+            <span x-show="!pipeRunning">▶ Start</span>
+            <span x-show="pipeRunning">⏳ Running…</span>
+          </button>
+          <div x-show="pipeStatus">
+            <span class="status-dot" :class="pipeRunning?'dot-yellow':(pipeError?'dot-red':'dot-green')"></span>
+            <span style="color:var(--muted);font-size:13px" x-text="pipeStatus"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" x-show="pipeLog.length > 0">
+        <div class="card-title">Progress</div>
+        <div class="log-box" x-ref="logbox">
+          <template x-for="(line,i) in pipeLog" :key="i">
+            <div class="log-line" :class="line.cls" x-text="line.text"></div>
+          </template>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Run History</div>
+        <template x-for="r in runHistory" :key="r.id">
+          <div style="display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span class="status-dot" style="margin-top:5px" :class="r.status==='done'?'dot-green':'dot-red'"></span>
+            <span style="color:var(--muted);width:140px" x-text="r.started_at ? r.started_at.slice(0,16).replace('T',' ') : '—'"></span>
+            <span class="tag" x-text="r.mode"></span>
+            <span style="color:var(--muted)">fetched <b x-text="r.jobs_fetched"></b> · scored <b x-text="r.jobs_scored"></b> · generated <b x-text="r.jobs_generated"></b></span>
+          </div>
+        </template>
+        <div x-show="runHistory.length===0" style="color:var(--muted);padding:10px 0">No runs yet.</div>
+      </div>
+    </div>
+
+    <!-- ── Profile ───────────────────────────────────────────── -->
+    <div x-show="page==='profile'">
+      <div class="section-header">
+        <div class="section-title">Candidate Profile</div>
+        <label class="btn btn-primary" style="cursor:pointer">
+          ⬆ Upload CV
+          <input type="file" style="display:none" accept=".pdf,.md,.txt,.docx" @change="uploadCV($event)">
+        </label>
+      </div>
+
+      <div x-show="profileLoading" style="color:var(--muted);padding:20px">Parsing CV…</div>
+
+      <div x-show="profile && !profileLoading">
+        <div class="card">
+          <div class="card-title">Identity</div>
+          <div style="font-size:20px;font-weight:700" x-text="profile?.personal?.name"></div>
+          <div style="color:var(--muted);margin-top:4px" x-text="[profile?.personal?.location, profile?.personal?.email].filter(Boolean).join(' · ')"></div>
+          <div style="margin-top:10px;color:var(--muted);line-height:1.6" x-text="profile?.story"></div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="card-title">Skills</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <template x-for="s in (profile?.skills?.technical || []).slice(0,12)" :key="s">
+                <span class="tag" x-text="s"></span>
+              </template>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Target Roles</div>
+            <template x-for="r in profile?.target?.roles || []" :key="r">
+              <div style="color:var(--muted);padding:2px 0" x-text="r"></div>
+            </template>
+          </div>
+          <div class="card">
+            <div class="card-title">Languages</div>
+            <template x-for="l in profile?.personal?.languages || []" :key="l.language">
+              <div style="display:flex;justify-content:space-between;padding:3px 0">
+                <span x-text="l.language"></span>
+                <span style="color:var(--muted)" x-text="l.level"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="card" x-show="profile?.positioning_summary">
+          <div class="card-title">Headhunter Positioning</div>
+          <div style="font-style:italic;color:var(--text)" x-text="profile?.positioning_summary"></div>
+          <div style="margin-top:12px" x-show="(profile?.inferred_strengths||[]).length">
+            <div style="color:var(--green);font-size:12px;font-weight:600;margin-bottom:6px">STRENGTHS</div>
+            <template x-for="s in profile?.inferred_strengths||[]" :key="s">
+              <div style="color:var(--muted);padding:2px 0">✓ <span x-text="s"></span></div>
+            </template>
+          </div>
+          <div style="margin-top:12px" x-show="(profile?.likely_gaps||[]).length">
+            <div style="color:var(--yellow);font-size:12px;font-weight:600;margin-bottom:6px">LIKELY GAPS</div>
+            <template x-for="g in profile?.likely_gaps||[]" :key="g">
+              <div style="color:var(--muted);padding:2px 0">△ <span x-text="g"></span></div>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div x-show="!profile && !profileLoading" style="color:var(--muted);padding:30px;text-align:center">
+        No profile found. Upload your CV to get started.
+      </div>
+    </div>
+
+  </main><!-- /main -->
+</div><!-- /shell -->
+
+<!-- Detail panel overlay -->
+<div class="overlay" x-show="detailOpen" @click="detailOpen=false" x-transition.opacity></div>
+<div class="detail-panel" :class="{open: detailOpen}">
+  <div x-show="selectedJob">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+      <div>
+        <div style="font-size:18px;font-weight:700" x-text="selectedJob?.title"></div>
+        <div style="color:var(--muted);margin-top:3px" x-text="selectedJob?.company + ' · ' + selectedJob?.location"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" @click="detailOpen=false">✕</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <a :href="selectedJob?.url" target="_blank" class="btn btn-primary btn-sm">🔗 Open Job</a>
+      <button class="btn btn-secondary btn-sm" @click="generateApplication(selectedJob?.id)" :disabled="genLoading">
+        <span x-show="!genLoading">✨ Generate CV + Letter</span>
+        <span x-show="genLoading">Generating…</span>
+      </button>
+      <select class="btn btn-secondary btn-sm" style="padding:5px 8px" @change="updateStatus(selectedJob?.id, $event.target.value)">
+        <option value="">Set status…</option>
+        <option value="interested">Interested</option>
+        <option value="applied">Applied</option>
+        <option value="rejected">Rejected</option>
+        <option value="interview">Interview</option>
+      </select>
+    </div>
+
+    <!-- Score breakdown -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div :class="'score ' + scoreClass(selectedJob?.score || 0)" style="width:48px;height:48px;font-size:18px" x-text="(selectedJob?.score||0).toFixed(1)"></div>
+        <div>
+          <div style="font-weight:600">Overall match</div>
+          <div style="color:var(--muted);font-size:13px" x-text="selectedJob?.reasoning"></div>
+        </div>
+      </div>
+      <template x-for="[dim, val] in Object.entries(selectedJob?.breakdown || {})">
+        <div class="dim-bar">
+          <div class="dim-label" x-text="dim.replace(/_/g,' ')"></div>
+          <div class="bar-track"><div class="bar-fill" :style="'width:' + (val*10) + '%'"></div></div>
+          <div style="width:28px;text-align:right;color:var(--muted);font-size:12px" x-text="val.toFixed(1)"></div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Apply angle -->
+    <div class="card" x-show="selectedJob?.application_angle" style="margin-bottom:14px">
+      <div class="card-title">Application Angle</div>
+      <div style="color:var(--text);font-style:italic" x-text="selectedJob?.application_angle"></div>
+    </div>
+
+    <!-- Generated documents -->
+    <div x-show="generatedApp">
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">Optimized CV</div>
+        <div class="md-content" x-html="renderMd(generatedApp?.cv_optimized_md)"></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title">Cover Letter</div>
+        <div class="md-content" x-html="renderMd(generatedApp?.cover_letter_md)"></div>
+      </div>
+      <div class="card" x-show="(generatedApp?.gaps||[]).length > 0">
+        <div class="card-title" style="color:var(--yellow)">Gaps to Address</div>
+        <template x-for="g in generatedApp?.gaps||[]" :key="g">
+          <div style="color:var(--muted);padding:3px 0">△ <span x-text="g"></span></div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function app() {
+  return {
+    page: 'dashboard',
+    stats: {}, topJobs: [], allJobs: [], runHistory: [],
+    profile: null, profileLoading: false,
+    filters: { minScore: 6, source: '', status: '', search: '' },
+    pipeMode: 'full', pipeRunning: false, pipeStatus: '', pipeError: false, pipeLog: [],
+    detailOpen: false, selectedJob: null, generatedApp: null, genLoading: false,
+    ws: null,
+
+    async init() {
+      await this.loadStats();
+      await this.loadTopJobs();
+      await this.loadRunHistory();
+    },
+
+    async loadStats() {
+      const r = await fetch('/api/jobs?limit=1').then(r=>r.json()).catch(()=>({}));
+      const all = await fetch('/api/jobs?limit=999').then(r=>r.json()).catch(()=>({jobs:[]}));
+      this.stats.total_jobs = all.jobs?.length || 0;
+      this.stats.scored_jobs = all.jobs?.filter(j=>j.score>0).length || 0;
+      this.stats.top_matches = all.jobs?.filter(j=>j.score>=7).length || 0;
+      this.allJobs = all.jobs || [];
+    },
+
+    async loadTopJobs() {
+      const data = await fetch('/api/jobs?min_score=7&limit=10').then(r=>r.json()).catch(()=>({jobs:[]}));
+      this.topJobs = data.jobs || [];
+    },
+
+    async loadJobs() {
+      const data = await fetch('/api/jobs?limit=200').then(r=>r.json()).catch(()=>({jobs:[]}));
+      this.allJobs = data.jobs || [];
+    },
+
+    async loadProfile() {
+      this.profileLoading = true;
+      const data = await fetch('/api/profile').then(r=>r.ok?r.json():null).catch(()=>null);
+      this.profile = data;
+      this.profileLoading = false;
+    },
+
+    async loadRunHistory() {
+      const data = await fetch('/api/pipeline/history?limit=8').then(r=>r.json()).catch(()=>({runs:[]}));
+      this.runHistory = data.runs || [];
+    },
+
+    get filteredJobs() {
+      return this.allJobs.filter(j => {
+        if (j.score < this.filters.minScore) return false;
+        if (this.filters.source && !j.source.includes(this.filters.source)) return false;
+        if (this.filters.status && j.status !== this.filters.status) return false;
+        if (this.filters.search) {
+          const q = this.filters.search.toLowerCase();
+          if (!j.title.toLowerCase().includes(q) && !j.company.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      });
+    },
+
+    scoreClass(s) {
+      if (s >= 7.5) return 'score-high';
+      if (s >= 5) return 'score-mid';
+      return 'score-low';
+    },
+
+    async openDetail(job) {
+      this.selectedJob = job;
+      this.generatedApp = null;
+      this.detailOpen = true;
+      // Load full description
+      const full = await fetch('/api/jobs/' + job.id).then(r=>r.json()).catch(()=>null);
+      if (full) Object.assign(this.selectedJob, full);
+      // Load existing application if any
+      const app = await fetch('/api/generate/application/' + job.id).then(r=>r.ok?r.json():null).catch(()=>null);
+      if (app) this.generatedApp = app;
+    },
+
+    async generateApplication(jobId) {
+      if (!jobId) return;
+      this.genLoading = true;
+      const data = await fetch('/api/generate/application/' + jobId, {method:'POST'}).then(r=>r.json()).catch(()=>null);
+      this.generatedApp = data;
+      this.genLoading = false;
+    },
+
+    async updateStatus(jobId, status) {
+      if (!jobId || !status) return;
+      await fetch('/api/jobs/' + jobId + '/status?status=' + status, {method:'PATCH'});
+      if (this.selectedJob) this.selectedJob.status = status;
+      this.allJobs = this.allJobs.map(j => j.id===jobId ? {...j, status} : j);
+    },
+
+    async uploadCV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      this.profileLoading = true;
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await fetch('/api/profile/upload', {method:'POST', body:fd}).then(r=>r.json()).catch(()=>null);
+      this.profile = data;
+      this.profileLoading = false;
+    },
+
+    runPipeline() {
+      this.pipeLog = [];
+      this.pipeRunning = true;
+      this.pipeError = false;
+      this.pipeStatus = 'Connecting…';
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      this.ws = new WebSocket(proto + '://' + location.host + '/ws/pipeline');
+      this.ws.onopen = () => {
+        this.pipeStatus = 'Running ' + this.pipeMode + '…';
+        this.ws.send(JSON.stringify({action:'run', mode:this.pipeMode}));
+      };
+      this.ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        const ev = msg.event, d = msg.data || {};
+        const lines = {
+          profile_done: () => ({text: '✓ Profile loaded: ' + d.name, cls:'ok'}),
+          source_done: () => ({text: '✓ ' + d.source + ': ' + d.count + ' jobs', cls:'ok'}),
+          fetch_done: () => ({text: '→ Total fetched: ' + d.total, cls:'ok'}),
+          filter_done: () => ({text: '→ After filter: ' + d.kept + ' kept, ' + d.dropped + ' dropped', cls:''}),
+          score_progress: () => ({text: '⋯ Scored ' + d.scored + ' jobs…', cls:''}),
+          gen_done: () => ({text: '✨ Generated ' + d.generated + ' applications', cls:'ok'}),
+          done: () => ({text: '✅ Done — scored: ' + d.jobs_scored + ', generated: ' + d.jobs_generated, cls:'ok'}),
+          error: () => ({text: '✗ Error: ' + d.message, cls:'err'}),
+        };
+        const fn = lines[ev];
+        if (fn) this.pipeLog.push(fn());
+        if (ev === 'done') {
+          this.pipeRunning = false; this.pipeStatus = 'Completed';
+          this.loadStats(); this.loadTopJobs(); this.loadRunHistory();
+        }
+        if (ev === 'error') { this.pipeRunning = false; this.pipeError = true; this.pipeStatus = 'Failed'; }
+        this.$nextTick(() => { const b = this.$refs.logbox; if(b) b.scrollTop=b.scrollHeight; });
+      };
+      this.ws.onclose = () => { if(this.pipeRunning) { this.pipeRunning=false; this.pipeStatus='Disconnected'; } };
+    },
+
+    renderMd(text) {
+      if (!text) return '';
+      return text
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/^([^<\n].+)$/gm, '$1')
+        .replace(/<\/p><p>/g, '</p><p class="md-p">');
+    },
+  }
+}
+</script>
+</body>
+</html>

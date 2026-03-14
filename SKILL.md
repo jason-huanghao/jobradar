@@ -1,210 +1,205 @@
----
-name: jobradar
-description: >
-  AI-powered job hunting agent. Trigger when the user wants to: search for jobs,
-  find AI/ML/research/PM/DevRel positions in Germany or globally, score a job
-  against their CV, generate a tailored cover letter, check today's top matches,
-  mark a job as applied, explain a job's score, record preferences, or set up
-  automated daily job searching. Works as a 7×24 background agent. All commands
-  are listed below — invoke them by running the corresponding CLI command.
----
+# JobRadar — OpenClaw Skill
 
-# JobRadar Skill
-
-AI job search pipeline: CV parsing → multi-source scraping → LLM scoring →
-Excel tracker + daily digest + cover letters. Runs as a 7×24 background agent.
+JobRadar is an AI-powered job search agent that fetches, scores, and ranks job listings from multiple sources (Arbeitsagentur, Indeed, Google Jobs, BOSS直聘, 拉勾, 智联) against your CV, then generates tailored CVs and cover letters for top matches.
 
 ---
 
-## Conversational Commands
+## Skill Metadata
 
-When a user says one of these, run the corresponding command:
-
-| User says | Run |
-|-----------|-----|
-| "set up JobRadar" / "configure for me" | `jobradar --init --cv … --llm … --key …` |
-| "is JobRadar ready?" / "check setup" | `jobradar --health --json` |
-| "what's in my job pool?" / "show me the status" | `jobradar --status --json` |
-| "find new jobs" / "search now" / "run job search" | `jobradar --update` |
-| "quick test" / "test quickly" | `jobradar --mode quick` |
-| "show today's top jobs" / "what are my best matches?" | `jobradar --show-digest --json` |
-| "write cover letter for [company]" | `jobradar --generate-app "[company]"` |
-| "explain score for [company]" / "why did I score low on [X]?" | `jobradar --explain "[company]"` |
-| "mark [company] as applied" | `jobradar --mark-applied "[company]"` |
-| "I liked [X]" / "not interested in [Y]" | `jobradar --feedback "[X] liked" "[Y] not_interested"` |
-| "run full pipeline" | `jobradar` |
-| "set up daily search" / "install agent" | `jobradar --install-agent` |
-
-**Feedback actions:** `liked`, `not_interested`, `applied`, `preferred`, `avoided`
-
-**Agent pattern for first-time setup:**
-1. Call `jobradar --init --cv <cv> --llm <provider> --key <key> --locations <locs>`
-2. Call `jobradar --health --json` → verify all green
-3. Call `jobradar --mode quick` → first run
-4. Call `jobradar --show-digest --json` → present results to user
+```yaml
+skill_id: jobradar
+display_name: JobRadar — AI Job Search
+version: 0.2.0
+author: jason-huanghao
+entry_point: jobradar.interfaces.skill:run_skill
+requires_server: true
+server_port: 7842
+```
 
 ---
 
-## Platform Install Instructions
+## Prerequisites
 
-> 📖 **Full guide:** [docs/GUIDE_OPENCLAW_CLAUDE.md](docs/GUIDE_OPENCLAW_CLAUDE.md)
+1. Install JobRadar:
+   ```bash
+   pip install -e ".[all]"
+   ```
 
-### Quick bootstrap (no config editing needed)
+2. Configure LLM and CV path:
+   ```bash
+   cp config.example.yaml config.yaml
+   # Edit config.yaml
+   ```
+
+3. Set your LLM API key:
+   ```bash
+   export ARK_API_KEY=your_key_here   # Volcengine Ark
+   # or: export OPENAI_API_KEY=...
+   # or: export ZAI_API_KEY=...
+   ```
+
+4. Verify setup:
+   ```bash
+   jobradar status
+   ```
+
+---
+
+## Available Tools
+
+### `run_pipeline`
+Run the full job search and scoring pipeline.
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `mode` | string | `"quick"` | `full` \| `quick` \| `score-only` \| `dry-run` |
+
+**Example invocation:**
+> "Run a quick job search for me"
+> "Find new AI engineer jobs in Berlin"
+> "Score all jobs against my CV"
+
+**Returns:** `{ run_id, status, jobs_fetched, jobs_new, jobs_scored, jobs_generated }`
+
+---
+
+### `list_jobs`
+Return top-scoring jobs from the database.
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `min_score` | float | `6.0` | Minimum overall score (0–10) |
+| `source` | string | `""` | Filter by source (e.g. `"arbeitsagentur"`, `"indeed"`) |
+| `limit` | int | `20` | Max results |
+
+**Example invocation:**
+> "Show me the best job matches"
+> "List top 10 jobs from Arbeitsagentur"
+> "What jobs scored above 8?"
+
+**Returns:** `{ jobs: [...], total }`
+
+---
+
+### `get_job_detail`
+Get full details for a specific job including description.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `job_id` | string | ✓ | Job ID from `list_jobs` |
+
+**Example invocation:**
+> "Tell me more about that AI Engineer role at Siemens"
+
+---
+
+### `generate_application`
+Generate an optimized CV + cover letter for a specific job.
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `job_id` | string | ✓ | Job ID from `list_jobs` |
+
+**Example invocation:**
+> "Generate a cover letter for the top match"
+> "Create application materials for job abc123"
+
+**Returns:** `{ cv_optimized_md, cover_letter_md, gaps, application_id }`
+
+---
+
+### `get_digest`
+Return a Markdown digest of the top-scoring jobs (good for a daily summary).
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `min_score` | float | `6.0` | Minimum score threshold |
+
+**Example invocation:**
+> "Give me today's job digest"
+> "Summarize the best matches"
+
+---
+
+### `get_status`
+Return the status of the last pipeline run.
+
+**Example invocation:**
+> "What's the status of JobRadar?"
+> "When did the last job search run?"
+
+---
+
+## Web Dashboard
+
+When the skill server is running, the full dashboard is available at:
+**http://127.0.0.1:7842**
+
+Features:
+- Live pipeline progress via WebSocket
+- Job table with filter/sort by score, source, status
+- Score breakdown (skills, seniority, location, language, visa, growth)
+- One-click CV + cover letter generation
+- Status tracking (new → interested → applied → interview)
+- Excel export and Markdown digest
+
+---
+
+## CLI Commands
 
 ```bash
-# Agent-driven one-liner — no wizard, no YAML editing
-jobradar --init \
-  --cv https://mysite.com/cv.pdf \
-  --locations "Berlin,Remote" \
-  --llm openai \
-  --key $OPENAI_API_KEY
-jobradar --health --json   # verify (returns JSON agents can parse)
-jobradar --mode quick      # first test run
+jobradar update               # Run full pipeline (daily cron job)
+jobradar update --mode quick  # Quick run (fewer queries)
+jobradar web                  # Start dashboard
+jobradar status               # DB stats
+jobradar setup                # Interactive setup wizard
 ```
 
-### OpenClaw / Opencode (oh-my-openagent)
-
-Place this project in your OpenClaw skills directory. OpenClaw auto-detects it
-via this SKILL.md and maps the conversational commands table to CLI calls.
-
-### Claude Code
-
-Open the project directory in Claude Code. It reads `CLAUDE.md` automatically.
+### launchd daily agent (macOS)
 
 ```bash
-# In Claude Code terminal:
-jobradar --init --cv ./cv.md --llm openai --key $OPENAI_API_KEY
-jobradar --health
-jobradar --update
-```
-
-### Claude (claude.ai)
-
-With Desktop Commander or Filesystem MCP connected, Claude can run all
-`jobradar` commands from the terminal on your behalf.
-
-### Standalone CLI
-
-```bash
-git clone https://github.com/jason-huanghao/jobradar.git && cd jobradar
-pip install -e .
-jobradar --init --cv ./cv.md --llm openai --key $OPENAI_API_KEY
-jobradar --health
-jobradar --mode quick
-jobradar --install-agent  # daily 8am automation (macOS/Linux)
+jobradar install-agent        # Creates ~/Library/LaunchAgents/com.jobradar.update.plist
 ```
 
 ---
 
-## Quick Reference
+## Configuration Reference
 
-### Key commands
+See `config.example.yaml` for all options. Key fields:
 
-```bash
-jobradar --init                     # Non-interactive bootstrap (agent-friendly)
-jobradar --setup                    # Interactive setup wizard
-jobradar --health [--json]          # Check LLM + source connectivity
-jobradar --status [--json]          # Pool stats + source readiness
-jobradar                            # Full pipeline (crawl + score + output)
-jobradar --update                   # Incremental (new jobs only) + email
-jobradar --mode quick               # Fast test: BA + Indeed only
-jobradar --mode dry-run             # Show queries only, don't run
-jobradar --show-digest [--json]     # Print today's digest
-jobradar --generate-app "AMD"       # Cover letter for AMD job
-jobradar --mark-applied "SAP"       # Mark SAP as applied
-jobradar --explain "Databricks"     # Score breakdown for Databricks
-jobradar --feedback "AMD liked"     # Record preference
-jobradar --install-agent            # Install daily 8am cron/launchd
-jobradar --uninstall-agent          # Remove scheduler
-jobradar --rerun-scoring            # Clear + re-score all jobs
-jobradar --parse-cv-only            # Parse CV → JSON
-jobradar --cv PATH_OR_URL           # Override CV for this run
-```
-
-### Key file paths
-
-| File | Purpose |
-|------|---------|
-| `config.yaml` | All settings (generated by `--setup`) |
-| `.env` | API keys (never commit to git) |
-| `cv/cv_current.md` | Your Markdown CV |
-| `cv/profile.md` | Job search preferences |
-| `outputs/jobs_pipeline.xlsx` | Excel job tracker |
-| `outputs/digests/digest_YYYY-MM-DD.md` | Daily digest |
-| `outputs/applications/` | Per-job cover letters |
-| `memory/job_pool.json` | Persistent job cache |
-| `memory/feedback.json` | Your preference history |
-| `memory/agent.log` | Agent run log |
-
-### LLM auto-detection
-
-JobRadar automatically detects which LLM to use. **No extra config needed** if
-you are already inside a configured agent framework.
-
-**Priority order:**
-1. `config.yaml` `llm.text` (if the referenced env var has a valid key)
-2. Agent framework env vars (checked at startup):
-   - OpenClaw: `OPENCLAW_API_KEY` + `OPENCLAW_BASE_URL` + `OPENCLAW_MODEL`
-   - Claude Code: `ANTHROPIC_API_KEY` (+ optional `ANTHROPIC_BASE_URL`)
-   - Opencode: `OPENCODE_API_KEY` + `OPENCODE_BASE_URL` + `OPENCODE_MODEL`
-3. Generic provider env vars: `ZAI_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `ARK_API_KEY`, `OPENROUTER_API_KEY`
-4. Local Ollama at `localhost:11434` (if running)
-
-If no key is found, `jobradar` will print a setup guide and abort.
-
-**Supported providers** (all OpenAI-compatible format, no proxy needed):
-
-| Provider | Env var | Notes |
-|----------|---------|-------|
-| Volcengine Ark | `ARK_API_KEY` | doubao-seed series |
-| Z.AI | `ZAI_API_KEY` | Z.AI coding plan |
-| DeepSeek | `DEEPSEEK_API_KEY` | ~$0.14/1M tokens |
-| OpenAI | `OPENAI_API_KEY` | GPT-4o-mini recommended |
-| OpenRouter | `OPENROUTER_API_KEY` | 200+ models via one key |
-| Anthropic/Claude | `ANTHROPIC_API_KEY` | Claude Code native |
-| OpenClaw | `OPENCLAW_API_KEY` | OpenClaw agent native |
-| Opencode | `OPENCODE_API_KEY` | Opencode agent native |
-| Ollama | _(none)_ | Local, free, auto-detected |
-
-### Scoring dimensions
-
-Jobs scored 1-10 across 6 dimensions:
-`skills_match`, `seniority_fit`, `location_fit`, `language_fit`, `visa_friendly`, `growth_potential`
-
-Digest threshold: score ≥ 6 (configurable)
-Application generation: score ≥ 7 (configurable)
+| Section | Key | Description |
+|---------|-----|-------------|
+| `llm.text.provider` | string | LLM provider |
+| `llm.text.model` | string | Model name |
+| `candidate.cv_path` | path | Your CV file |
+| `search.locations` | list | Cities to search |
+| `search.max_days_old` | int | Only fetch recent jobs |
+| `search.exclude_keywords` | list | Pre-filter titles |
+| `scoring.min_score_application` | float | Auto-generate above this score |
+| `sources.*.enabled` | bool | Enable/disable each scraper |
+| `server.port` | int | Dashboard port (default 7842) |
 
 ---
 
-## Architecture
+## Troubleshooting
 
-```
-config.yaml + cv/cv_current.md
-        │
-        ▼
-CV Parser (LLM) → CandidateProfile
-        │
-        ▼
-Query Builder → per-source SearchQuery list
-        │
-        ▼
-Sources (parallel) → RawJob list
-  ├── Arbeitsagentur (DE, free REST API + full descriptions)
-  ├── JobSpy: Indeed + Glassdoor + Google Jobs
-  ├── StepStone (stub, contribution welcome)
-  ├── XING (stub, contribution welcome)
-  ├── BOSS直聘 (CN, needs browser cookie; CN IP recommended)
-  ├── 拉勾网 (CN, session cookie auto-fetch; CN IP recommended)
-  └── 智联招聘 (CN, no auth; CN IP recommended)
-        │
-        ▼
-Deduplicator → unique RawJob list
-        │
-        ▼
-Scorer (LLM, batched) + feedback.json → ScoredJob list
-        │
-        ├── Excel: outputs/jobs_pipeline.xlsx
-        ├── Digest: outputs/digests/digest_YYYY-MM-DD.md
-        ├── Applications: outputs/applications/{company}/
-        └── Email: SMTP digest (if enabled)
-```
+**No jobs returned:**
+- Check API keys in `.env`
+- Lower `max_days_old` or expand `locations`
+- Run `jobradar update --mode dry-run` to test query generation
+
+**LLM errors:**
+- Check `data/cache/` for cached profile
+- Test LLM: `jobradar health`
+
+**BOSS直聘 / 拉勾 not working:**
+- Cookie auth required — see adapter docstrings
+- Set `BOSSZHIPIN_COOKIES` env var or place cookies in `memory/`
+
+**Port conflict:**
+- Change `server.port` in `config.yaml`

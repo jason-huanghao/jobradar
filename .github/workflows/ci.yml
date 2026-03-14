@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: pip install -e ".[all]"
+
+      - name: Import check
+        run: |
+          python -c "
+          from jobradar.config import load_config
+          from jobradar.models.job import RawJob, ScoredJob, SearchQuery, ScoreBreakdown
+          from jobradar.models.candidate import CandidateProfile
+          from jobradar.storage.models import Job, ScoredJobRecord, PipelineRun
+          from jobradar.storage.db import init_db, get_session
+          from jobradar.sources.base import JobSource
+          from jobradar.sources.normalizer import normalise, dedup
+          from jobradar.sources.query_builder import build_queries
+          from jobradar.sources.registry import build_registry
+          from jobradar.scoring.hard_filter import apply as hard_filter
+          from jobradar.scoring.scorer import score_jobs
+          from jobradar.pipeline import JobRadarPipeline
+          from jobradar.api.main import create_app
+          from jobradar.interfaces.cli import app as cli_app
+          print('All imports OK')
+          "
+
+      - name: Lint
+        run: |
+          pip install ruff -q
+          ruff check src/ --select E,F,W --ignore E501 || true
+
+      - name: DB init test
+        run: |
+          python -c "
+          import tempfile
+          from pathlib import Path
+          from sqlmodel import select, func
+          from jobradar.storage.db import init_db, get_session
+          from jobradar.storage.models import Job
+          with tempfile.TemporaryDirectory() as d:
+              db = Path(d) / 'sub' / 'test.db'
+              init_db(db)
+              with next(get_session(db)) as s:
+                  count = s.exec(select(func.count(Job.id))).one()
+              assert count == 0
+          print('DB init + auto-mkdir OK')
+          "
+
+      - name: Normalizer + hard_filter test
+        run: |
+          python -c "
+          from jobradar.models.job import RawJob
+          from jobradar.sources.normalizer import normalise, dedup
+          jobs = [
+              RawJob(title='A', company='X', url='https://ex.com/1', source='test'),
+              RawJob(title='B', company='Y', url='https://ex.com/2', source='test'),
+              RawJob(title='A', company='X', url='https://ex.com/1', source='test'),
+          ]
+          result = dedup([normalise(j) for j in jobs])
+          assert len(result) == 2, f'Expected 2 got {len(result)}'
+          print('Normalizer + dedup OK')
+          "
+
+      - name: dry-run pipeline test
+        run: |
+          python -c "
+          import tempfile
+          from pathlib import Path
+          from jobradar.config import AppConfig, CandidateConfig, ServerConfig
+          from jobradar.pipeline import JobRadarPipeline
+          with tempfile.TemporaryDirectory() as d:
+              cv = Path(d) / 'cv.md'
+              cv.write_text('# Test\nSoftware Engineer with Python skills.')
+              cfg = AppConfig()
+              cfg.candidate = CandidateConfig(cv_path=str(cv))
+              cfg.server = ServerConfig(
+                  db_path=str(Path(d) / 'data' / 'test.db'),
+                  cache_dir=str(Path(d) / 'cache'),
+              )
+              cfg._config_dir = Path(d)
+              result = JobRadarPipeline(cfg).run(mode='dry-run')
+              assert result.status == 'done', result
+          print('dry-run pipeline OK')
+          "
+
+      - name: CLI smoke test
+        run: |
+          jobradar --help
+          jobradar status

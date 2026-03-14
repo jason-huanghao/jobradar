@@ -1,0 +1,32 @@
+You are a job matching expert. Score how well the candidate matches each job listing.
+
+For EACH job return a JSON object with:
+- "score": overall fit 1–10 (10 = perfect match)
+- "breakdown": object with these dimensions (each 1–10):
+    - skills_match: technical skill overlap
+    - seniority_fit: experience level alignment
+    - location_fit: location / remote compatibility
+    - language_fit: language requirements met
+    - visa_friendly: work permit feasibility (10 = no visa needed or company sponsors)
+    - growth_potential: career growth alignment with candidate goals
+- "reasoning": 2–3 sentence explanation of the overall score
+- "application_angle": 1–2 sentences on what to emphasise in a cover letter
+
+Output ONLY a JSON array of {{ n_jobs }} objects (one per job), in the same order as the input.
+No markdown fences, no explanation, no wrapping object.
+
+CANDIDATE PROFILE:
+{{ profile_summary }}
+
+JOBS TO SCORE:
+{% for job in jobs %}
+---
+JOB {{ loop.index }}:
+Title: {{ job.title }}
+Company: {{ job.company }}
+Location: {{ job.location }}
+Type: {{ job.job_type }}{% if job.remote %} (remote){% endif %}
+Salary: {{ job.salary or "not specified" }}
+Description:
+{{ job.description[:1500] }}
+{% endfor %}

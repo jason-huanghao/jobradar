@@ -32,21 +32,10 @@ class SourceRegistry:
         since: datetime,
         on_source_done: callable | None = None,
     ) -> list[RawJob]:
-        """Run all enabled sources in parallel threads.
-
-        Args:
-            queries:        Full list of SearchQuery objects.
-            config:         AppConfig (used to check enabled flags).
-            since:          Only return jobs posted after this datetime.
-            on_source_done: Optional callback(source_id, jobs_found) for progress.
-
-        Returns:
-            Deduplicated list of RawJob (normalised IDs).
-        """
-        # Group queries by source prefix
+        # Group queries by source prefix (e.g. "jobspy:indeed" → "jobspy")
         by_source: dict[str, list[SearchQuery]] = {}
         for q in queries:
-            key = q.source.split(":")[0]  # "jobspy:indeed" → "jobspy"
+            key = q.source.split(":")[0]
             by_source.setdefault(key, []).append(q)
 
         enabled = {sid: src for sid, src in self._sources.items() if src.is_enabled(config)}
@@ -83,7 +72,7 @@ class SourceRegistry:
 
 
 def build_registry(config: AppConfig) -> SourceRegistry:
-    """Instantiate and register all adapters. Import here to avoid circular deps."""
+    """Instantiate and register all adapters."""
     from .adapters.arbeitsagentur import ArbeitsagenturSource
     from .adapters.bosszhipin import BossZhipinSource
     from .adapters.jobspy_adapter import JobSpySource
@@ -96,11 +85,11 @@ def build_registry(config: AppConfig) -> SourceRegistry:
     for src in [
         ArbeitsagenturSource(),
         JobSpySource(),
+        StepstoneSource(),
+        XingSource(),
         BossZhipinSource(),
         LagouSource(),
         ZhilianSource(),
-        StepstoneSource(),
-        XingSource(),
     ]:
         registry.register(src)
     return registry

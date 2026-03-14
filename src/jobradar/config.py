@@ -91,8 +91,8 @@ class SourcesConfig(BaseModel):
             enabled=True, boards=["indeed", "google"], country="germany"
         )
     )
-    stepstone: SourceConfig = Field(default_factory=SourceConfig)
-    xing: SourceConfig = Field(default_factory=SourceConfig)
+    stepstone: SourceConfig = Field(default_factory=lambda: SourceConfig(enabled=True))
+    xing: SourceConfig = Field(default_factory=lambda: SourceConfig(enabled=True))
     bosszhipin: BossZhipinConfig = Field(default_factory=BossZhipinConfig)
     lagou: LagouConfig = Field(default_factory=LagouConfig)
     zhilian: ZhilianConfig = Field(default_factory=ZhilianConfig)

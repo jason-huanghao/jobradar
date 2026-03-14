@@ -71,10 +71,10 @@ sources:
     country: germany   # used for Indeed country filter
 
   stepstone:
-    enabled: false     # stub — not yet implemented
+    enabled: true      # HTML scraper (httpx + BeautifulSoup)
 
   xing:
-    enabled: false     # stub — not yet implemented
+    enabled: true      # HTML scraper (httpx + BeautifulSoup)
 
   # ── Chinese platforms (only useful if you're targeting CN roles) ──────────
   bosszhipin:

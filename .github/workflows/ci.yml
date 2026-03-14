@@ -24,7 +24,10 @@ jobs:
       - name: Install
         run: pip install -e ".[all]"
 
-      - name: Import check
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Import check — all modules
         run: |
           python -c "
           from jobradar.config import load_config
@@ -36,6 +39,13 @@ jobs:
           from jobradar.sources.normalizer import normalise, dedup
           from jobradar.sources.query_builder import build_queries
           from jobradar.sources.registry import build_registry
+          from jobradar.sources.adapters.arbeitsagentur import ArbeitsagenturSource
+          from jobradar.sources.adapters.stepstone import StepstoneSource
+          from jobradar.sources.adapters.xing import XingSource
+          from jobradar.sources.adapters.jobspy_adapter import JobSpySource
+          from jobradar.sources.adapters.zhilian import ZhilianSource
+          from jobradar.sources.adapters.lagou import LagouSource
+          from jobradar.sources.adapters.bosszhipin import BossZhipinSource
           from jobradar.scoring.hard_filter import apply as hard_filter
           from jobradar.scoring.scorer import score_jobs
           from jobradar.pipeline import JobRadarPipeline
@@ -45,11 +55,9 @@ jobs:
           "
 
       - name: Lint
-        run: |
-          pip install ruff -q
-          ruff check src/ --select E,F,W --ignore E501 || true
+        run: ruff check src/ --select E,F,W --ignore E501 || true
 
-      - name: DB init test
+      - name: DB init + auto-mkdir test
         run: |
           python -c "
           import tempfile
@@ -61,12 +69,11 @@ jobs:
               db = Path(d) / 'sub' / 'test.db'
               init_db(db)
               with next(get_session(db)) as s:
-                  count = s.exec(select(func.count(Job.id))).one()
-              assert count == 0
-          print('DB init + auto-mkdir OK')
+                  assert s.exec(select(func.count(Job.id))).one() == 0
+          print('DB init OK')
           "
 
-      - name: Normalizer + hard_filter test
+      - name: Normaliser + hard_filter test
         run: |
           python -c "
           from jobradar.models.job import RawJob
@@ -77,8 +84,8 @@ jobs:
               RawJob(title='A', company='X', url='https://ex.com/1', source='test'),
           ]
           result = dedup([normalise(j) for j in jobs])
-          assert len(result) == 2, f'Expected 2 got {len(result)}'
-          print('Normalizer + dedup OK')
+          assert len(result) == 2
+          print('Normaliser + dedup OK')
           "
 
       - name: dry-run pipeline test
@@ -101,6 +108,21 @@ jobs:
               result = JobRadarPipeline(cfg).run(mode='dry-run')
               assert result.status == 'done', result
           print('dry-run pipeline OK')
+          "
+
+      - name: Arbeitsagentur live fetch test
+        run: |
+          python -c "
+          from datetime import datetime, timedelta, timezone
+          from jobradar.models.job import SearchQuery
+          from jobradar.sources.adapters.arbeitsagentur import ArbeitsagenturSource
+          src = ArbeitsagenturSource()
+          since = datetime.now(timezone.utc) - timedelta(days=14)
+          q = SearchQuery(keyword='Software Engineer', location='Berlin',
+                          source='arbeitsagentur', extra={'max_results': 3})
+          jobs = src.fetch([q], since)
+          assert len(jobs) > 0, 'Expected jobs from Arbeitsagentur'
+          print(f'Arbeitsagentur live: {len(jobs)} jobs OK')
           "
 
       - name: CLI smoke test

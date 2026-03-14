@@ -110,8 +110,8 @@ jobradar install-agent        # Install macOS launchd daily agent
 | BOSS直聘 | 🇨🇳 China | Cookie (see below) |
 | 拉勾网 | 🇨🇳 China | Auto-fetched |
 | 智联招聘 | 🇨🇳 China | None |
-| StepStone | 🇩🇪 Germany | Stub (PR welcome) |
-| XING | 🇩🇪 Germany | Stub (PR welcome) |
+| StepStone | 🇩🇪 Germany | None (HTML scraper) |
+| XING | 🇩🇪 Germany | None (HTML scraper) |
 
 ### BOSS直聘 cookie setup
 

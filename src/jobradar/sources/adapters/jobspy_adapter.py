@@ -1,5 +1,4 @@
-"""python-jobspy adapter: Indeed, Google, Glassdoor."""
-
+"""python-jobspy adapter: Indeed, Google Jobs, Glassdoor, LinkedIn."""
 from __future__ import annotations
 
 import logging
@@ -26,24 +25,24 @@ class JobSpySource(JobSource):
 
         all_jobs: list[RawJob] = []
         seen: set[str] = set()
+        days_old = max(1, (datetime.utcnow() - since).days)
 
         for query in queries:
-            board = query.extra.get("board", "indeed")
+            board   = query.extra.get("board", "indeed")
             country = query.extra.get("country", "germany")
-            days_old = int((datetime.utcnow() - since).days) or 14
-
+            max_r   = query.extra.get("max_results", 50)
             try:
                 df = scrape_jobs(
                     site_name=[board],
                     search_term=query.keyword,
                     location=query.location if query.location != "Remote" else "Germany",
                     country_indeed=country,
-                    results_wanted=50,
+                    results_wanted=max_r,
                     hours_old=days_old * 24,
                     is_remote=query.location == "Remote",
                 )
-            except Exception as exc:
-                logger.error("JobSpy [%s] '%s': %s", board, query.keyword, exc)
+            except Exception as e:
+                logger.error("JobSpy [%s] '%s': %s", board, query.keyword, e)
                 continue
 
             if df is None or df.empty:
@@ -66,7 +65,8 @@ def _map_row(row, board: str) -> RawJob | None:
         url = str(row.get("job_url", row.get("link", ""))).strip()
         salary = ""
         if row.get("min_amount"):
-            salary = f"{row.get('min_amount', '')}-{row.get('max_amount', '')} {row.get('currency', 'EUR')}"
+            salary = (f"{row.get('min_amount', '')}-{row.get('max_amount', '')} "
+                      f"{row.get('currency', 'EUR')}")
         dp = row.get("date_posted")
         date_posted = dp.isoformat() if isinstance(dp, datetime) else str(dp or "")
         return RawJob(
@@ -82,6 +82,6 @@ def _map_row(row, board: str) -> RawJob | None:
             salary=salary,
             remote=bool(row.get("is_remote", False)),
         )
-    except Exception as exc:
-        logger.warning("JobSpy row parse failed: %s", exc)
+    except Exception as e:
+        logger.warning("JobSpy row parse failed: %s", e)
         return None

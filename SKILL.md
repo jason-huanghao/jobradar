@@ -23,6 +23,8 @@ server_port: 7842
 1. Install JobRadar:
    ```bash
    pip install -e ".[all]"
+   # Optional: enable Playwright for CN source fallbacks
+   playwright install chromium
    ```
 
 2. Configure LLM and CV path:

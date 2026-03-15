@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import webbrowser
@@ -15,6 +16,473 @@ from rich.table import Table
 app = typer.Typer(name="jobradar", help="AI-powered job search agent", add_completion=False)
 console = Console()
 
+# ── Supported LLM providers for init wizard ────────────────────────
+_PROVIDERS = [
+    # (display_name, env_var, base_url, default_model)
+    ("Volcengine Ark (doubao)",  "ARK_API_KEY",       "https://ark.cn-beijing.volces.com/api/coding/v3", "doubao-seed-2.0-code"),
+    ("Z.AI (Claude proxy)",      "ZAI_API_KEY",        "https://api.z.ai/v1",                            "claude-sonnet-4-20250514"),
+    ("OpenAI",                   "OPENAI_API_KEY",     "https://api.openai.com/v1",                       "gpt-4o-mini"),
+    ("DeepSeek",                 "DEEPSEEK_API_KEY",   "https://api.deepseek.com/v1",                     "deepseek-chat"),
+    ("OpenRouter",               "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1",                    "anthropic/claude-3-5-haiku"),
+    ("Anthropic",                "ANTHROPIC_API_KEY",  "https://api.anthropic.com/v1",                    "claude-sonnet-4-20250514"),
+    ("Ollama (local)",           "",                   "http://localhost:11434/v1",                        "llama3.1"),
+    ("LM Studio (local)",        "",                   "http://localhost:1234/v1",                         "loaded-model"),
+]
+
+
+# ── jobradar init ──────────────────────────────────────────────────
+
+@app.command()
+def init(
+    cv: Optional[str] = typer.Option(
+        None, "--cv",
+        help="CV source: file path (.md/.pdf/.docx/.txt), URL, or '-' to paste text.",
+    ),
+    api_key: Optional[str] = typer.Option(
+        None, "--api-key",
+        help="LLM API key as ENV_VAR=value, e.g. ARK_API_KEY=abc123",
+    ),
+    locations: Optional[str] = typer.Option(
+        None, "--locations",
+        help="Comma-separated search locations, e.g. 'Berlin,Hannover,Remote'",
+    ),
+    yes: bool = typer.Option(False, "-y", "--yes", help="Non-interactive: accept all defaults"),
+):
+    """Interactive setup wizard — configure LLM key, CV, and search locations.
+
+    Can be called non-interactively:
+
+        jobradar init --cv /path/to/cv.pdf --api-key ARK_API_KEY=xxx --locations "Berlin,Remote" -y
+    """
+    from shutil import copy
+
+    console.print("")
+    console.print("[bold cyan]⚡ JobRadar Setup Wizard[/bold cyan]")
+    console.print("━" * 50)
+
+    project_dir = _find_project_dir()
+    console.print(f"[dim]Project dir: {project_dir}[/dim]")
+    os.chdir(project_dir)
+
+    # ── Step 1: config.yaml ────────────────────────────────────────
+    cfg_path = project_dir / "config.yaml"
+    if not cfg_path.exists():
+        example = project_dir / "config.example.yaml"
+        if example.exists():
+            copy(example, cfg_path)
+            console.print("✓ Created config.yaml from config.example.yaml")
+        else:
+            console.print("[yellow]⚠ config.example.yaml not found — creating minimal config.yaml[/yellow]")
+            cfg_path.write_text(_MINIMAL_CONFIG)
+
+    # ── Step 2: API key ────────────────────────────────────────────
+    console.print("")
+    console.print("[bold]Step 1/3 — LLM API Key[/bold]")
+    resolved_key_line = _resolve_api_key(api_key, yes, project_dir)
+    if resolved_key_line:
+        _write_env(project_dir, resolved_key_line)
+
+    # ── Step 3: CV file ────────────────────────────────────────────
+    console.print("")
+    console.print("[bold]Step 2/3 — Your CV[/bold]")
+    cv_path_str = _resolve_cv(cv, yes, project_dir)
+    if cv_path_str:
+        _patch_config(cfg_path, "cv_path", cv_path_str)
+        console.print(f"  ✓ CV set: [cyan]{cv_path_str}[/cyan]")
+
+    # ── Step 4: Locations ──────────────────────────────────────────
+    console.print("")
+    console.print("[bold]Step 3/3 — Search Locations[/bold]")
+    locs = _resolve_locations(locations, yes)
+    if locs:
+        _patch_config_locations(cfg_path, locs)
+        console.print(f"  ✓ Locations: [cyan]{', '.join(locs)}[/cyan]")
+
+    # ── Step 5: Health check ───────────────────────────────────────
+    console.print("")
+    console.print("━" * 50)
+    console.print("[bold]Running health check…[/bold]")
+    console.print("")
+    ctx = typer.Context(health)
+    health.callback(ctx) if hasattr(health, 'callback') else None
+
+    # Call health directly
+    _run_health_check(project_dir)
+
+    console.print("")
+    console.print("━" * 50)
+    console.print("[bold green]✅ JobRadar is ready![/bold green]")
+    console.print("")
+    console.print("Quick start:")
+    console.print("  [bold]jobradar update --mode quick --limit 5[/bold]   # fetch & score jobs")
+    console.print("  [bold]jobradar web[/bold]                              # open dashboard")
+    console.print("  [bold]jobradar status[/bold]                           # show DB stats")
+    console.print("")
+
+
+def _resolve_api_key(cli_key: Optional[str], yes: bool, project_dir: Path) -> Optional[str]:
+    """Detect or prompt for LLM API key. Returns 'ENV_VAR=value' string or None."""
+
+    # 1. CLI flag wins
+    if cli_key:
+        if "=" not in cli_key:
+            console.print(f"[red]--api-key must be ENV_VAR=value, e.g. ARK_API_KEY=abc123[/red]")
+            return None
+        env_var, _, val = cli_key.partition("=")
+        console.print(f"  ✓ Using provided key: [cyan]{env_var}[/cyan]")
+        return cli_key
+
+    # 2. Auto-detect from current environment
+    for name, env_var, _, _ in _PROVIDERS:
+        if not env_var:
+            continue
+        val = os.getenv(env_var, "").strip()
+        if val and val not in ("your_volcengine_ark_key_here", "REPLACE_ME", ""):
+            console.print(f"  ✓ Detected [cyan]{env_var}[/cyan] in environment → using [bold]{name}[/bold]")
+            return f"{env_var}={val}"
+
+    # 3. Check existing .env file
+    env_file = project_dir / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip()
+            for _, env_var, _, _ in _PROVIDERS:
+                if k == env_var and v and v not in ("your_volcengine_ark_key_here", "REPLACE_ME"):
+                    console.print(f"  ✓ Found [cyan]{k}[/cyan] in .env file")
+                    return None  # already in .env, no need to write again
+
+    # 4. Interactive prompt
+    if yes:
+        console.print("  [yellow]⚠ No API key found — skipping (use --api-key to provide one)[/yellow]")
+        return None
+
+    console.print("  No LLM API key detected. Choose a provider:")
+    console.print("")
+    for i, (name, env_var, _, model) in enumerate(_PROVIDERS, 1):
+        key_hint = f"  [{env_var}]" if env_var else "  [no key needed]"
+        console.print(f"    [bold]{i}.[/bold] {name}{key_hint}")
+    console.print("")
+
+    choice = typer.prompt("  Enter number (or press Enter to skip)", default="")
+    if not choice.strip():
+        console.print("  [dim]Skipped — set your key in .env later[/dim]")
+        return None
+
+    try:
+        idx = int(choice.strip()) - 1
+        name, env_var, base_url, model = _PROVIDERS[idx]
+    except (ValueError, IndexError):
+        console.print("  [yellow]Invalid choice — skipped[/yellow]")
+        return None
+
+    if not env_var:
+        # Local provider (Ollama / LM Studio) — no key needed
+        console.print(f"  ✓ Using [bold]{name}[/bold] (no key required)")
+        _patch_config_llm(project_dir / "config.yaml", name.lower().split()[0], base_url, model, "")
+        return None
+
+    key_val = typer.prompt(f"  Paste your {env_var}", hide_input=True)
+    key_val = key_val.strip()
+    if not key_val:
+        console.print("  [dim]Skipped[/dim]")
+        return None
+
+    # Update config.yaml to match chosen provider
+    _patch_config_llm(project_dir / "config.yaml",
+                      name.lower().split()[0], base_url, model, env_var)
+    console.print(f"  ✓ Key saved for [bold]{name}[/bold]")
+    return f"{env_var}={key_val}"
+
+
+def _resolve_cv(cli_cv: Optional[str], yes: bool, project_dir: Path) -> Optional[str]:
+    """Resolve CV source. Returns the cv_path string to write to config."""
+
+    if cli_cv:
+        return _import_cv(cli_cv, project_dir)
+
+    # Check if config already points to an existing file
+    cfg_path = project_dir / "config.yaml"
+    if cfg_path.exists():
+        import re
+        match = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
+        if match:
+            existing = (project_dir / match.group(1).strip().strip("\"'")).resolve()
+            if existing.exists():
+                console.print(f"  ✓ CV already configured: [cyan]{match.group(1).strip()}[/cyan]")
+                return None  # already set and valid
+
+    if yes:
+        console.print("  [yellow]⚠ No CV provided — set candidate.cv_path in config.yaml[/yellow]")
+        return None
+
+    console.print("  Provide your CV (choose method):")
+    console.print("    [bold]1.[/bold] File path or URL")
+    console.print("    [bold]2.[/bold] Paste Markdown text")
+    console.print("    [bold]3.[/bold] Skip for now")
+    console.print("")
+
+    choice = typer.prompt("  Enter number", default="3")
+
+    if choice.strip() == "1":
+        src = typer.prompt("  Path or URL").strip()
+        return _import_cv(src, project_dir)
+
+    elif choice.strip() == "2":
+        console.print("  Paste your CV as Markdown. Enter a blank line then 'END' when done:")
+        lines = []
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                break
+            if line.strip() == "END":
+                break
+            lines.append(line)
+        cv_text = "\n".join(lines).strip()
+        if cv_text:
+            cv_dir = project_dir / "cv"
+            cv_dir.mkdir(exist_ok=True)
+            cv_file = cv_dir / "cv_current.md"
+            cv_file.write_text(cv_text, encoding="utf-8")
+            console.print(f"  ✓ CV saved to [cyan]cv/cv_current.md[/cyan] ({len(cv_text)} chars)")
+            return "./cv/cv_current.md"
+        else:
+            console.print("  [dim]No text entered — skipped[/dim]")
+            return None
+    else:
+        console.print("  [dim]Skipped — set candidate.cv_path in config.yaml later[/dim]")
+        return None
+
+
+def _import_cv(source: str, project_dir: Path) -> Optional[str]:
+    """Copy/download a CV to cv/cv_current.{ext} and return the relative path."""
+    import shutil
+    from urllib.parse import urlparse
+
+    cv_dir = project_dir / "cv"
+    cv_dir.mkdir(exist_ok=True)
+
+    source = source.strip()
+
+    # URL
+    if source.startswith("http://") or source.startswith("https://"):
+        try:
+            import httpx
+            resp = httpx.get(source, follow_redirects=True, timeout=30)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            ext = ".pdf" if "pdf" in content_type else ".md"
+            dest = cv_dir / f"cv_current{ext}"
+            dest.write_bytes(resp.content)
+            rel = f"./cv/cv_current{ext}"
+            console.print(f"  ✓ Downloaded CV → [cyan]{rel}[/cyan]")
+            return rel
+        except Exception as e:
+            console.print(f"  [red]Failed to download {source}: {e}[/red]")
+            return None
+
+    # stdin
+    if source == "-":
+        lines = sys.stdin.read()
+        dest = cv_dir / "cv_current.md"
+        dest.write_text(lines, encoding="utf-8")
+        console.print(f"  ✓ CV read from stdin → [cyan]./cv/cv_current.md[/cyan]")
+        return "./cv/cv_current.md"
+
+    # Local file
+    src_path = Path(source).expanduser().resolve()
+    if not src_path.exists():
+        console.print(f"  [red]File not found: {source}[/red]")
+        return None
+
+    ext = src_path.suffix.lower() or ".md"
+    dest = cv_dir / f"cv_current{ext}"
+
+    # If file is already inside project dir, use relative path
+    try:
+        rel = src_path.relative_to(project_dir)
+        console.print(f"  ✓ CV already in project: [cyan]{rel}[/cyan]")
+        return f"./{rel}"
+    except ValueError:
+        pass
+
+    shutil.copy2(src_path, dest)
+    console.print(f"  ✓ Copied {src_path.name} → [cyan]./cv/cv_current{ext}[/cyan]")
+    return f"./cv/cv_current{ext}"
+
+
+def _resolve_locations(cli_locs: Optional[str], yes: bool) -> Optional[list[str]]:
+    if cli_locs:
+        return [l.strip() for l in cli_locs.split(",") if l.strip()]
+    if yes:
+        return None
+    locs = typer.prompt(
+        "  Search locations (comma-separated, e.g. Berlin,Hannover,Remote)",
+        default="Berlin,Remote",
+    )
+    return [l.strip() for l in locs.split(",") if l.strip()]
+
+
+def _run_health_check(project_dir: Path) -> None:
+    from ..config import load_config
+    from ..llm.client import LLMClient
+    from ..llm.env_probe import probe_llm_env
+
+    os.chdir(project_dir)
+    try:
+        cfg = load_config()
+    except Exception as e:
+        console.print(f"  [yellow]⚠ Config load: {e}[/yellow]")
+        return
+
+    found, source = probe_llm_env(cfg.llm.text)
+    if found:
+        try:
+            llm = LLMClient(cfg.llm.text)
+            resp = llm.complete("Say OK in one word.", temperature=0.0)
+            console.print(f"  [green]✓ LLM ({cfg.llm.text.model})[/green] ping OK")
+        except Exception as e:
+            console.print(f"  [yellow]⚠ LLM ping failed: {e}[/yellow]")
+    else:
+        console.print(f"  [yellow]⚠ No LLM key found — run [bold]jobradar init[/bold] to add one[/yellow]")
+
+    cv_path = cfg.resolve_path(cfg.candidate.cv_path)
+    if cv_path.exists():
+        console.print(f"  [green]✓ CV found:[/green] {cfg.candidate.cv_path}")
+    else:
+        console.print(f"  [yellow]⚠ CV not found:[/yellow] {cfg.candidate.cv_path}")
+
+
+def _write_env(project_dir: Path, key_line: str) -> None:
+    env_file = project_dir / ".env"
+    if env_file.exists():
+        existing = env_file.read_text()
+        k = key_line.split("=")[0]
+        # Replace existing key or append
+        lines = [l for l in existing.splitlines() if not l.startswith(k)]
+        lines.append(key_line)
+        env_file.write_text("\n".join(lines) + "\n")
+    else:
+        env_file.write_text(key_line + "\n")
+
+
+def _patch_config(cfg_path: Path, key: str, value: str) -> None:
+    import re
+    txt = cfg_path.read_text()
+    txt = re.sub(rf'{key}:.*', f'{key}: {value}', txt)
+    cfg_path.write_text(txt)
+
+
+def _patch_config_locations(cfg_path: Path, locs: list[str]) -> None:
+    import re
+    txt = cfg_path.read_text()
+    new_locs = "\n".join(f"    - {l}" for l in locs)
+    txt = re.sub(
+        r'locations:\s*\n(\s+-[^\n]*\n)+',
+        f'locations:\n{new_locs}\n',
+        txt,
+    )
+    cfg_path.write_text(txt)
+
+
+def _patch_config_llm(cfg_path: Path, provider: str, base_url: str,
+                       model: str, api_key_env: str) -> None:
+    import re
+    txt = cfg_path.read_text()
+    txt = re.sub(r'provider:.*', f'provider: {provider}', txt)
+    txt = re.sub(r'model:.*doubao.*|model:.*claude.*|model:.*gpt.*|model:.*deepseek.*',
+                 f'model: {model}', txt)
+    txt = re.sub(r'base_url:.*', f'base_url: {base_url}', txt)
+    if api_key_env:
+        txt = re.sub(r'api_key_env:.*', f'api_key_env: {api_key_env}', txt)
+    cfg_path.write_text(txt)
+
+
+def _find_project_dir() -> Path:
+    """Find the project root (containing config.example.yaml or pyproject.toml)."""
+    # 1. JOBRADAR_DIR env var
+    env_dir = os.getenv("JOBRADAR_DIR", "")
+    if env_dir and Path(env_dir).exists():
+        return Path(env_dir).resolve()
+
+    # 2. Walk up from cwd
+    here = Path.cwd()
+    for parent in [here, *here.parents]:
+        if (parent / "config.example.yaml").exists():
+            return parent.resolve()
+        if (parent / "pyproject.toml").exists():
+            content = (parent / "pyproject.toml").read_text()
+            if "openclaw-jobradar" in content:
+                return parent.resolve()
+
+    # 3. ~/.jobradar default
+    default = Path.home() / ".jobradar"
+    if default.exists():
+        return default.resolve()
+
+    return here.resolve()
+
+
+_MINIMAL_CONFIG = """\
+llm:
+  text:
+    provider: volcengine
+    model: doubao-seed-2.0-code
+    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
+    api_key_env: ARK_API_KEY
+    temperature: 0.3
+    max_tokens: 4096
+    rate_limit_delay: 2.0
+candidate:
+  cv_path: ./cv/cv_current.md
+search:
+  locations:
+    - Berlin
+    - Remote
+  max_results_per_source: 50
+  quick_max_results: 5
+  max_days_old: 14
+  exclude_keywords:
+    - Praktikum
+    - Werkstudent
+    - internship
+    - Ausbildung
+sources:
+  arbeitsagentur:
+    enabled: true
+  jobspy:
+    enabled: true
+    boards:
+      - indeed
+      - google
+    country: germany
+  stepstone:
+    enabled: true
+  xing:
+    enabled: true
+  bosszhipin:
+    enabled: false
+  lagou:
+    enabled: false
+  zhilian:
+    enabled: false
+scoring:
+  min_score_application: 7.0
+  batch_size: 5
+server:
+  host: 127.0.0.1
+  port: 7842
+  open_browser: true
+  db_path: ./jobradar.db
+  cache_dir: ./memory
+"""
+
+
+# ── jobradar web ───────────────────────────────────────────────────
 
 @app.command()
 def web(
@@ -43,18 +511,20 @@ def web(
     uvicorn.run(create_app(cfg), host=cfg.server.host, port=cfg.server.port, log_level="warning")
 
 
+# ── jobradar update ────────────────────────────────────────────────
+
 @app.command()
 def update(
     mode: str = typer.Option("full", help="full | quick | score-only | dry-run"),
     config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
     limit: Optional[int] = typer.Option(
         None, "--limit",
-        help="Max results per source per query (overrides config). Useful for quick tests.",
+        help="Max results per source per query. Useful for quick tests (e.g. --limit 3).",
     ),
 ):
     """Fetch and score jobs (run this daily).
 
-    Use --mode quick --limit 3 for a fast smoke test (few jobs, fast scoring).
+    Quick smoke test:  jobradar update --mode quick --limit 3
     """
     from ..config import load_config
     from ..llm.env_probe import probe_llm_env
@@ -62,15 +532,14 @@ def update(
 
     cfg = load_config(config)
 
-    # --limit flag overrides quick_max_results and max_results_per_source
     if limit is not None:
         cfg.search.quick_max_results = limit
         cfg.search.max_results_per_source = limit
 
     found, source = probe_llm_env(cfg.llm.text)
     if not found:
-        console.print(f"[red]No LLM configured.[/red] {source}")
-        console.print("Set an API key in [cyan].env[/cyan] — e.g. ARK_API_KEY=your_key")
+        console.print("[red]No LLM configured.[/red]")
+        console.print("Run [bold]jobradar init[/bold] to set up your API key.")
         raise typer.Exit(1)
 
     console.print(f"[dim]LLM: {cfg.llm.text.model} via {source}[/dim]")
@@ -105,6 +574,8 @@ def update(
         raise typer.Exit(1)
 
 
+# ── jobradar status ────────────────────────────────────────────────
+
 @app.command()
 def status():
     """Show DB stats and pipeline status."""
@@ -130,68 +601,68 @@ def status():
     console.print(table)
 
 
+# ── jobradar health ────────────────────────────────────────────────
+
 @app.command()
 def health():
-    """Check LLM connectivity and config validity."""
+    """Check LLM connectivity, CV file, and config validity."""
     from ..config import load_config
     from ..llm.client import LLMClient
     from ..llm.env_probe import probe_llm_env
 
     cfg = load_config()
 
-    # Check LLM
     found, source = probe_llm_env(cfg.llm.text)
     if not found:
         console.print(f"[red]✗ LLM not configured.[/red] {source}")
+        console.print("  Run [bold]jobradar init[/bold] to set up your API key.")
         raise typer.Exit(1)
 
     console.print(f"[dim]LLM source: {source}[/dim]")
     try:
         llm = LLMClient(cfg.llm.text)
         resp = llm.complete("Say OK in one word.", temperature=0.0)
-        console.print(f"[green]✓ LLM ping OK[/green] — response: {resp!r}")
+        console.print(f"[green]✓ LLM ping OK[/green] ({cfg.llm.text.model}) → {resp!r}")
     except Exception as e:
         console.print(f"[red]✗ LLM ping failed: {e}[/red]")
         raise typer.Exit(1)
 
-    # Check CV
     cv_path = cfg.resolve_path(cfg.candidate.cv_path)
     if cv_path.exists():
-        console.print(f"[green]✓ CV found:[/green] {cv_path}")
+        console.print(f"[green]✓ CV found:[/green] {cfg.candidate.cv_path}")
     else:
-        console.print(f"[yellow]⚠ CV not found:[/yellow] {cv_path}")
-        console.print("  Set candidate.cv_path in config.yaml")
+        console.print(f"[yellow]⚠ CV not found:[/yellow] {cfg.candidate.cv_path}")
+        console.print("  Run [bold]jobradar init[/bold] to provide your CV.")
 
-    # Check cache
     cache_dir = cfg.resolve_path(cfg.server.cache_dir)
     profile_cache = cache_dir / "candidate_profile.json"
     if profile_cache.exists():
         console.print(f"[green]✓ Cached profile:[/green] {profile_cache}")
     else:
-        console.print(f"[dim]  No cached profile yet (will be created on first run)[/dim]")
+        console.print("[dim]  No cached profile yet (created on first run)[/dim]")
 
+
+# ── jobradar setup (alias for init -y) ────────────────────────────
 
 @app.command()
 def setup():
-    """Copy config.example.yaml → config.yaml if missing."""
+    """Copy config.example.yaml → config.yaml if missing (non-interactive)."""
+    from shutil import copy
     console.print("[bold]JobRadar Setup[/bold]")
     cfg_path = Path("config.yaml")
     if not cfg_path.exists():
-        from shutil import copy
         example = Path(__file__).parent.parent.parent.parent / "config.example.yaml"
         if example.exists():
             copy(example, cfg_path)
-            console.print(f"[green]✓ Created config.yaml[/green]")
+            console.print("[green]✓ Created config.yaml[/green]")
         else:
-            console.print("[yellow]config.example.yaml not found — please create config.yaml manually.[/yellow]")
+            console.print("[yellow]config.example.yaml not found — run jobradar init[/yellow]")
     else:
         console.print("[dim]config.yaml already exists.[/dim]")
-    console.print("\nNext steps:")
-    console.print("  1. Edit [cyan]config.yaml[/cyan] — set candidate.cv_path and search.locations")
-    console.print("  2. Set LLM key in [cyan].env[/cyan] — e.g. ARK_API_KEY=your_key")
-    console.print("  3. Run [bold]jobradar health[/bold] to verify")
-    console.print("  4. Run [bold]jobradar update --mode quick --limit 3[/bold] for a quick test")
+    console.print("\nFor guided setup, run: [bold]jobradar init[/bold]")
 
+
+# ── jobradar install-agent ─────────────────────────────────────────
 
 @app.command("install-agent")
 def install_agent():

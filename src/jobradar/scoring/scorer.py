@@ -1,4 +1,4 @@
-"""LLM-based job scorer — batched, Jinja2-templated."""
+"""LLM-based job scorer — batched, Jinja2-templated with per-job fallback."""
 
 from __future__ import annotations
 
@@ -14,6 +14,9 @@ from ..models.job import RawJob, ScoreBreakdown, ScoredJob
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "llm" / "prompts"
+
+# Truncate long descriptions to avoid token-limit truncation of LLM response
+_MAX_DESC_CHARS = 400
 
 
 def _profile_summary(profile: CandidateProfile) -> str:
@@ -37,6 +40,19 @@ def _profile_summary(profile: CandidateProfile) -> str:
     if profile.inferred_strengths:
         parts.append(f"Strengths: {', '.join(profile.inferred_strengths)}")
     return "\n".join(parts)
+
+
+def _truncate_jobs(jobs: list[RawJob]) -> list[RawJob]:
+    """Return shallow copies with descriptions truncated to avoid token overflow."""
+    truncated = []
+    for j in jobs:
+        if len(j.description or "") > _MAX_DESC_CHARS:
+            jt = j.model_copy()
+            jt.description = j.description[:_MAX_DESC_CHARS] + "…"
+            truncated.append(jt)
+        else:
+            truncated.append(j)
+    return truncated
 
 
 def score_jobs(
@@ -83,17 +99,20 @@ def _score_batch(
     template,
     llm: LLMClient,
 ) -> list[ScoredJob]:
+    truncated = _truncate_jobs(jobs)
     prompt = template.render(
         profile_summary=profile_summary,
-        jobs=jobs,
-        n_jobs=len(jobs),
+        jobs=truncated,
+        n_jobs=len(truncated),
     )
     try:
         raw = llm.complete_auto(prompt, temperature=0.2)
         results = raw if isinstance(raw, list) else raw.get("jobs", raw.get("results", [raw]))
+        if not isinstance(results, list):
+            raise ValueError(f"Expected list, got {type(results)}")
     except Exception as exc:
-        logger.error("Scoring batch LLM call failed: %s", exc)
-        return [ScoredJob(job=j, score=0.0, reasoning="Scoring failed") for j in jobs]
+        logger.warning("Batch scoring failed (%s) — falling back to per-job scoring", exc)
+        return _score_individually(jobs, profile_summary, template, llm)
 
     scored: list[ScoredJob] = []
     for idx, job in enumerate(jobs):
@@ -109,4 +128,37 @@ def _score_batch(
             reasoning=r.get("reasoning", ""),
             application_angle=r.get("application_angle", ""),
         ))
+    return scored
+
+
+def _score_individually(
+    jobs: list[RawJob],
+    profile_summary: str,
+    template,
+    llm: LLMClient,
+) -> list[ScoredJob]:
+    """Score each job alone — used as fallback when batch parse fails."""
+    scored: list[ScoredJob] = []
+    for job in jobs:
+        truncated = _truncate_jobs([job])
+        prompt = template.render(
+            profile_summary=profile_summary,
+            jobs=truncated,
+            n_jobs=1,
+        )
+        try:
+            raw = llm.complete_auto(prompt, temperature=0.2)
+            results = raw if isinstance(raw, list) else raw.get("jobs", raw.get("results", [raw]))
+            r = results[0] if results else {}
+            breakdown = ScoreBreakdown(**r.get("breakdown", {}))
+            scored.append(ScoredJob(
+                job=job,
+                score=float(r.get("score", 0)),
+                breakdown=breakdown,
+                reasoning=r.get("reasoning", ""),
+                application_angle=r.get("application_angle", ""),
+            ))
+        except Exception as exc:
+            logger.error("Per-job scoring failed for '%s': %s", job.title, exc)
+            scored.append(ScoredJob(job=job, score=0.0, reasoning="Scoring unavailable"))
     return scored

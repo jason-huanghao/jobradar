@@ -1,5 +1,8 @@
 You are a job matching expert. Score how well the candidate matches each job listing.
 
+CRITICAL: You MUST output a complete, valid JSON array. Never truncate your response mid-JSON.
+Keep "reasoning" and "application_angle" concise (1–2 sentences each) to avoid truncation.
+
 For EACH job return a JSON object with:
 - "score": overall fit 1–10 (10 = perfect match)
 - "breakdown": object with these dimensions (each 1–10):
@@ -9,11 +12,11 @@ For EACH job return a JSON object with:
     - language_fit: language requirements met
     - visa_friendly: work permit feasibility (10 = no visa needed or company sponsors)
     - growth_potential: career growth alignment with candidate goals
-- "reasoning": 2–3 sentence explanation of the overall score
-- "application_angle": 1–2 sentences on what to emphasise in a cover letter
+- "reasoning": 1–2 sentence explanation (KEEP SHORT)
+- "application_angle": 1 sentence on what to emphasise (KEEP SHORT)
 
-Output ONLY a JSON array of {{ n_jobs }} objects (one per job), in the same order as the input.
-No markdown fences, no explanation, no wrapping object.
+Output ONLY a valid JSON array of exactly {{ n_jobs }} objects, in the same order as input.
+No markdown fences, no explanation, no wrapping object. The array must be complete and parseable.
 
 CANDIDATE PROFILE:
 {{ profile_summary }}
@@ -27,6 +30,5 @@ Company: {{ job.company }}
 Location: {{ job.location }}
 Type: {{ job.job_type }}{% if job.remote %} (remote){% endif %}
 Salary: {{ job.salary or "not specified" }}
-Description:
-{{ job.description[:1500] }}
+Description: {{ (job.description or "")[:400] }}
 {% endfor %}

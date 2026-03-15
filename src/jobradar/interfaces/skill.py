@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,13 @@ _PROVIDER_MAP = {
     "OPENROUTER_API_KEY": ("https://openrouter.ai/api/v1",                    "anthropic/claude-3-5-haiku"),
 }
 
+
+# Default: Germany-wide search — covers all major cities
+_DEFAULT_LOCATIONS = [
+    "Berlin", "Hamburg", "Munich", "Frankfurt", "Hannover",
+    "Cologne", "Stuttgart", "Leipzig", "Dresden", "Nuremberg",
+    "Remote",
+]
 
 # ── Project directory resolution ───────────────────────────────────
 
@@ -154,148 +162,264 @@ def _not_configured_response(message: str) -> str:
     }, ensure_ascii=False, indent=2)
 
 
+
 # ── Setup tool (no server needed) ─────────────────────────────────
 
 def _handle_setup(params: dict) -> str:
-    """Configure JobRadar in-process — no running server required.
+    """Configure JobRadar with minimal user interaction.
 
-    Accepts:
-        api_key: "ENV_VAR=value" e.g. "ARK_API_KEY=abc123"
-        cv_path: local file path or URL
-        cv_content: raw CV text (Markdown)
-        locations: "Berlin,Hannover,Remote"
-        check_only: bool — just report status without modifying anything
+    Agent flow:
+    1. Call setup({}) FIRST — returns detected config + prompt_for_user to show user
+    2. Show user the prompt_for_user string (one message — not multiple questions)
+    3. Apply any changes the user requests in a single follow-up call
+    4. Once configured=True, call run_pipeline({"mode": "quick"})
+
+    Parameters (all optional):
+        check_only: bool  — report state only, no writes (default: False)
+        api_key: str      — "ENV_VAR=value", e.g. "ARK_API_KEY=abc123"
+        cv_path: str      — local path (.md/.pdf/.docx/.txt) or URL (GitHub blob URLs supported)
+        cv_content: str   — raw CV text pasted directly
+        locations: str    — comma-separated e.g. "Berlin,Hamburg,Remote"
+                           default: Germany-wide (all major cities + Remote)
     """
-    results: dict[str, Any] = {}
-
-    # Find or create project dir
     project_dir = _find_project_dir()
     if project_dir is None:
         project_dir = Path.home() / ".jobradar"
         project_dir.mkdir(parents=True, exist_ok=True)
 
-    results["project_dir"] = str(project_dir)
-
-    # ── config.yaml ───────────────────────────────────────────────
+    check_only = params.get("check_only", False)
     cfg_path = project_dir / "config.yaml"
+
+    # ── Detect current state ───────────────────────────────────────
+    var, base_url, model = _detect_api_key()
+
+    current_cv = None
+    cv_exists = False
+    if cfg_path.exists():
+        m = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
+        if m:
+            current_cv = m.group(1).strip().strip("\'\"")
+            cv_abs = (project_dir / current_cv).resolve()
+            cv_exists = cv_abs.exists()
+
+    current_locs = []
+    if cfg_path.exists():
+        cfg_content = cfg_path.read_text()
+        # Extract only the locations block (between 'locations:' and the next top-level key)
+        loc_block = re.search(r'locations:\s*\n((?:    - [^\n]+\n)*)', cfg_content)
+        if loc_block:
+            current_locs = re.findall(r'    - (.+)', loc_block.group(1))
+
+    # Build human-readable summary
+    detected = {
+        "api_key": f"{var} (auto-detected from environment)" if var else "not found",
+        "cv": (f"{current_cv} ({'found' if cv_exists else 'FILE MISSING'})"
+               if current_cv else "not configured"),
+        "locations": ", ".join(current_locs) if current_locs else "not configured",
+        "project_dir": str(project_dir),
+    }
+
+    missing = []
+    if not var:
+        missing.append("api_key")
+    if not cv_exists:
+        missing.append("cv")
+
+    # ── Build prompt_for_user — one message the agent shows user ──
+    if not missing:
+        prompt_for_user = (
+            f"JobRadar is ready!\n"
+            f"\u2022 API Key: {detected['api_key']}\n"
+            f"\u2022 CV: {detected['cv']}\n"
+            f"\u2022 Locations: {detected['locations']}\n"
+            f"\nWould you like to change anything, or shall I run a quick job search now?"
+        )
+    elif missing == ["cv"]:
+        prompt_for_user = (
+            f"Almost ready! API key detected automatically ({var}).\n"
+            f"Just need your CV. Please provide:\n"
+            f"\u2022 A file path: /path/to/cv.pdf (or .md, .docx, .txt)\n"
+            f"\u2022 A URL: https://github.com/.../cv.md\n"
+            f"\u2022 Paste your CV text directly"
+        )
+    elif missing == ["api_key"]:
+        prompt_for_user = (
+            f"Almost ready! CV found: {current_cv}\n"
+            f"Just need an LLM API key:\n"
+            f"\u2022 Volcengine Ark: ARK_API_KEY=your_key\n"
+            f"\u2022 Z.AI (Claude): ZAI_API_KEY=your_key\n"
+            f"\u2022 OpenAI: OPENAI_API_KEY=your_key"
+        )
+    else:
+        prompt_for_user = (
+            "Quick setup needed:\n"
+            "1. Your CV (file path, URL, or paste text)\n"
+            "2. An LLM API key (ARK_API_KEY, ZAI_API_KEY, OPENAI_API_KEY, etc.)\n"
+            "Reply with both and I'll configure everything at once."
+        )
+
+    if check_only:
+        return json.dumps({
+            "status": "configured" if not missing else "needs_setup",
+            "detected": detected,
+            "missing": missing,
+            "prompt_for_user": prompt_for_user,
+        }, ensure_ascii=False, indent=2)
+
+    # ── Apply changes ──────────────────────────────────────────────
+    results: dict = {"project_dir": str(project_dir), "detected": detected}
+
+    # Ensure config.yaml exists
     if not cfg_path.exists():
         example = project_dir / "config.example.yaml"
         if example.exists():
-            import shutil
-            shutil.copy(example, cfg_path)
+            import shutil as _shutil
+            _shutil.copy(example, cfg_path)
         else:
             cfg_path.write_text(_MINIMAL_CONFIG)
         results["config"] = "created"
-    else:
-        results["config"] = "exists"
 
-    # ── API key ───────────────────────────────────────────────────
-    if params.get("check_only"):
-        var, base_url, model = _detect_api_key()
-        results["api_key_detected"] = var or "none"
-    elif "api_key" in params:
-        raw = params["api_key"].strip()
-        if "=" in raw:
-            env_var, _, val = raw.partition("=")
+    # API key
+    if "api_key" in params:
+        raw_key = params["api_key"].strip()
+        if "=" in raw_key:
+            env_var, _, val = raw_key.partition("=")
             env_var, val = env_var.strip(), val.strip()
-            # Write to .env
             env_file = project_dir / ".env"
-            existing_lines = env_file.read_text().splitlines() if env_file.exists() else []
-            lines = [l for l in existing_lines if not l.startswith(env_var)]
+            existing = env_file.read_text().splitlines() if env_file.exists() else []
+            lines = [l for l in existing if not l.startswith(env_var)]
             lines.append(f"{env_var}={val}")
             env_file.write_text("\n".join(lines) + "\n")
-            # Also set in current process for immediate use
             os.environ[env_var] = val
-            results["api_key"] = f"{env_var} saved"
-            # Update config.yaml to match provider
+            var, _, _ = _detect_api_key()
             if env_var in _PROVIDER_MAP:
-                base_url, model = _PROVIDER_MAP[env_var]
-                import re
-                txt = cfg_path.read_text()
-                txt = re.sub(r'api_key_env:.*', f'api_key_env: {env_var}', txt)
-                txt = re.sub(r'base_url:.*ark.*|base_url:.*openai.*|base_url:.*z\.ai.*|base_url:.*deepseek.*|base_url:.*anthropic.*|base_url:.*openrouter.*',
-                             f'base_url: {base_url}', txt)
-                cfg_path.write_text(txt)
-        else:
-            results["api_key_warning"] = "Format should be ENV_VAR=value"
-    else:
-        # Try to auto-detect
-        var, _, _ = _detect_api_key()
-        results["api_key_detected"] = var or "none — provide via api_key parameter"
+                base_url_p, model_p = _PROVIDER_MAP[env_var]
+                txt2 = cfg_path.read_text()
+                txt2 = re.sub(r'api_key_env:.*', f'api_key_env: {env_var}', txt2)
+                txt2 = re.sub(r'base_url: https?://\S+', f'base_url: {base_url_p}', txt2)
+                cfg_path.write_text(txt2)
+            results["api_key"] = f"{env_var} saved"
+    elif var:
+        results["api_key"] = f"{var} auto-detected"
 
-    # ── CV ────────────────────────────────────────────────────────
+    # CV
     cv_dir = project_dir / "cv"
     cv_dir.mkdir(exist_ok=True)
 
     if "cv_content" in params:
-        # Raw text provided
         cv_text = params["cv_content"].strip()
         dest = cv_dir / "cv_current.md"
         dest.write_text(cv_text, encoding="utf-8")
-        import re
-        txt = cfg_path.read_text()
-        txt = re.sub(r'cv_path:.*', 'cv_path: ./cv/cv_current.md', txt)
-        cfg_path.write_text(txt)
-        results["cv"] = f"saved ({len(cv_text)} chars) → cv/cv_current.md"
+        txt2 = cfg_path.read_text()
+        txt2 = re.sub(r'cv_path:.*', 'cv_path: ./cv/cv_current.md', txt2)
+        cfg_path.write_text(txt2)
+        results["cv"] = f"saved from text ({len(cv_text)} chars)"
+        cv_exists = True
 
     elif "cv_path" in params:
         src = params["cv_path"].strip()
-        if src.startswith("http://") or src.startswith("https://"):
+        # Convert GitHub blob URL to raw
+        if "github.com" in src and "/blob/" in src:
+            src = src.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+        if src.startswith("http"):
             try:
                 resp = httpx.get(src, follow_redirects=True, timeout=30)
                 resp.raise_for_status()
                 ext = ".pdf" if "pdf" in resp.headers.get("content-type", "") else ".md"
                 dest = cv_dir / f"cv_current{ext}"
                 dest.write_bytes(resp.content)
-                import re
-                txt = cfg_path.read_text()
-                txt = re.sub(r'cv_path:.*', f'cv_path: ./cv/cv_current{ext}', txt)
-                cfg_path.write_text(txt)
+                txt2 = cfg_path.read_text()
+                txt2 = re.sub(r'cv_path:.*', f'cv_path: ./cv/cv_current{ext}', txt2)
+                cfg_path.write_text(txt2)
                 results["cv"] = f"downloaded → cv/cv_current{ext}"
+                cv_exists = True
             except Exception as e:
                 results["cv_error"] = str(e)
         else:
             src_path = Path(src).expanduser().resolve()
             if src_path.exists():
-                import shutil, re
+                import shutil as _shutil
                 ext = src_path.suffix.lower() or ".md"
                 dest = cv_dir / f"cv_current{ext}"
                 try:
-                    dest.relative_to(project_dir)
-                    rel = str(dest.relative_to(project_dir))
+                    rel = str(src_path.relative_to(project_dir))
+                    results["cv"] = f"in project: ./{rel}"
                 except ValueError:
-                    shutil.copy2(src_path, dest)
-                    rel = f"cv/cv_current{ext}"
-                txt = cfg_path.read_text()
-                txt = re.sub(r'cv_path:.*', f'cv_path: ./{rel}', txt)
-                cfg_path.write_text(txt)
-                results["cv"] = f"copied → {rel}"
+                    _shutil.copy2(src_path, dest)
+                    results["cv"] = f"copied → cv/cv_current{ext}"
+                txt2 = cfg_path.read_text()
+                cv_rel = f"./cv/cv_current{ext}"
+                txt2 = re.sub(r'cv_path:.*', f'cv_path: {cv_rel}', txt2)
+                cfg_path.write_text(txt2)
+                cv_exists = True
             else:
-                results["cv_error"] = f"File not found: {src}"
+                results["cv_error"] = f"not found: {src}"
 
-    # ── Locations ─────────────────────────────────────────────────
+    # Locations
     if "locations" in params:
-        import re
         locs = [l.strip() for l in params["locations"].split(",") if l.strip()]
         new_locs = "\n".join(f"    - {l}" for l in locs)
-        txt = cfg_path.read_text()
-        txt = re.sub(r'locations:\s*\n(\s+-[^\n]*\n)+', f'locations:\n{new_locs}\n', txt)
-        cfg_path.write_text(txt)
+        txt2 = cfg_path.read_text()
+        txt2 = re.sub(r'locations:\s*\n(\s+-[^\n]*\n)+', f'locations:\n{new_locs}\n', txt2)
+        cfg_path.write_text(txt2)
         results["locations"] = locs
-
-    # ── Health check ──────────────────────────────────────────────
-    ok, msg = _is_configured()
-    results["configured"] = ok
-    if not ok:
-        results["next_step"] = msg
     else:
-        results["next_step"] = (
-            "Setup complete! Run the pipeline:\n"
-            "  run_pipeline({\"mode\": \"quick\"})"
-        )
+        # Apply Germany-wide defaults unless already set to real cities
+        # Use scoped regex to read ONLY the locations block (not exclude_keywords)
+        txt2 = cfg_path.read_text()
+        loc_block_m = re.search(r'locations:\s*\n((?:    - [^\n]+\n)*)', txt2)
+        current_loc_list = re.findall(r'    - (.+)', loc_block_m.group(1)) if loc_block_m else []
+        # Apply defaults if empty or only has the placeholder "Germany"
+        if not current_loc_list or current_loc_list == ["Germany"]:
+            new_locs = "\n".join(f"    - {l}" for l in _DEFAULT_LOCATIONS)
+            txt2 = re.sub(r'locations:\s*\n((?:    - [^\n]+\n)*)',
+                          f'locations:\n{new_locs}\n', txt2)
+            cfg_path.write_text(txt2)
+            results["locations"] = _DEFAULT_LOCATIONS
+        else:
+            results["locations"] = current_loc_list
 
-    return json.dumps({"status": "setup_complete" if ok else "setup_partial",
-                       **results}, ensure_ascii=False, indent=2)
+    # Always read back final locations from config to ensure result is accurate
+    try:
+        cfg_content = cfg_path.read_text()
+        loc_block = re.search(r'locations:\s*\n((?:    - [^\n]+\n)*)', cfg_content)
+        if loc_block:
+            final_locs = re.findall(r'    - (.+)', loc_block.group(1))
+            if final_locs:
+                results["locations"] = final_locs  # always overwrite with ground truth
+    except Exception:
+        pass
+
+    # ── Final status ───────────────────────────────────────────────
+    var2, _, _ = _detect_api_key()
+    cv_m = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
+    cv_final_ok = False
+    if cv_m:
+        cv_abs = (project_dir / cv_m.group(1).strip().strip("'\"")).resolve()
+        cv_final_ok = cv_abs.exists()
+
+    configured = bool(var2 and cv_final_ok)
+    missing2 = ([" api_key"] if not var2 else []) + (["cv"] if not cv_final_ok else [])
+
+    if configured:
+        final_prompt = (
+            f"\u2705 JobRadar is configured and ready!\n"
+            f"\u2022 API Key: {var2} (auto-detected)\n"
+            f"\u2022 CV: {cv_m.group(1).strip() if cv_m else 'set'}\n"
+            f"\u2022 Locations: Germany-wide ({len(_DEFAULT_LOCATIONS)} cities + Remote)\n"
+            f"\nShall I run a quick job search now? "
+            f"(I'll call run_pipeline and show you the top matches)"
+        )
+    else:
+        final_prompt = f"Still need: {', '.join(missing2)}. Please provide them."
+
+    results.update({
+        "configured": configured,
+        "missing": missing2,
+        "prompt_for_user": final_prompt,
+        "status": "setup_complete" if configured else "setup_partial",
+    })
+    return json.dumps(results, ensure_ascii=False, indent=2)
 
 
 # ── Server lifecycle ───────────────────────────────────────────────
@@ -446,8 +570,7 @@ candidate:
   cv_path: ./cv/cv_current.md
 search:
   locations:
-    - Berlin
-    - Remote
+    - Germany
   max_results_per_source: 50
   quick_max_results: 5
   max_days_old: 14

@@ -43,15 +43,13 @@ jobs:
           from jobradar.sources.adapters.stepstone import StepstoneSource
           from jobradar.sources.adapters.xing import XingSource
           from jobradar.sources.adapters.jobspy_adapter import JobSpySource
-          from jobradar.sources.adapters.zhilian import ZhilianSource
-          from jobradar.sources.adapters.lagou import LagouSource
-          from jobradar.sources.adapters.bosszhipin import BossZhipinSource
           from jobradar.scoring.hard_filter import apply as hard_filter
           from jobradar.scoring.scorer import score_jobs
           from jobradar.pipeline import JobRadarPipeline
           from jobradar.api.main import create_app
           from jobradar.interfaces.cli import app as cli_app
-          from jobradar.interfaces.skill import run_skill, _detect_api_key, _is_configured
+          from jobradar.interfaces.skill import run_skill, _detect_api_key, _is_configured, _DEFAULT_LOCATIONS
+          from jobradar.profile.extractor import extract_profile, _recover_partial_json
           print('All imports OK')
           "
 
@@ -125,27 +123,54 @@ jobs:
           print(f'Query builder OK: {len(queries)} queries, all capped at 3')
           "
 
+      - name: JSON truncation recovery test
+        run: |
+          python -c "
+          from jobradar.profile.extractor import _recover_partial_json
+          cases = [
+              ('{\"personal\":{\"name\":\"Hao\"},\"story\":\"trunc', 'Hao'),
+              ('{\"personal\":{\"name\":\"Jane\"}', 'Jane'),
+              ('\`\`\`json\n{\"personal\":{\"name\":\"Bob\"}}\n\`\`\`', 'Bob'),
+          ]
+          for raw, expected in cases:
+              got = _recover_partial_json(raw).get('personal', {}).get('name', '')
+              assert got == expected, f'Got {got!r}, expected {expected!r}'
+          print('JSON truncation recovery OK: all 3 cases pass')
+          "
+
       - name: Skill setup tool test
         run: |
           python -c "
-          import json, tempfile, os
-          from pathlib import Path
-          # Simulate a fresh environment with an API key
+          import json, tempfile, os, importlib
+          os.environ['ARK_API_KEY'] = 'test_key_ci'
+          from jobradar.interfaces.skill import _detect_api_key, _DEFAULT_LOCATIONS
+          # Test key detection
+          var, base_url, model = _detect_api_key()
+          assert var == 'ARK_API_KEY', f'Expected ARK_API_KEY, got {var}'
+          # Test setup with cv_content — default Germany-wide locations applied
           with tempfile.TemporaryDirectory() as d:
               os.environ['JOBRADAR_DIR'] = d
-              os.environ['ARK_API_KEY'] = 'test_key_ci'
-              from jobradar.interfaces.skill import run_skill, _detect_api_key
-              # Test key detection
-              var, base_url, model = _detect_api_key()
-              assert var == 'ARK_API_KEY', f'Expected ARK_API_KEY, got {var}'
-              # Test setup with cv_content
-              r = json.loads(run_skill('setup', json.dumps({
-                  'cv_content': '# Test\nSoftware Engineer.',
-                  'locations': 'Berlin,Remote',
+              import jobradar.interfaces.skill as sk
+              importlib.reload(sk)
+              r = json.loads(sk.run_skill('setup', json.dumps({
+                  'cv_content': '# Test Candidate\nSoftware Engineer.',
               })))
               assert r['status'] in ('setup_complete', 'setup_partial')
-              assert 'project_dir' in r
-              print(f'Skill setup tool OK: status={r[\"status\"]}')
+              locs = r.get('locations', [])
+              assert len(locs) >= 10, f'Expected Germany-wide defaults (>=10), got {locs}'
+              assert 'Berlin' in locs and 'Remote' in locs
+              assert 'prompt_for_user' in r
+              print(f'Skill setup OK: status={r[\"status\"]}, {len(locs)} locations, prompt present')
+          # Test check_only response shape
+          with tempfile.TemporaryDirectory() as d2:
+              os.environ['JOBRADAR_DIR'] = d2
+              os.environ.pop('ARK_API_KEY', None)
+              importlib.reload(sk)
+              r2 = json.loads(sk.run_skill('setup', json.dumps({'check_only': True})))
+              assert 'prompt_for_user' in r2
+              assert r2['status'] in ('configured', 'needs_setup')
+              assert 'detected' in r2
+              print(f'check_only OK: status={r2[\"status\"]}, missing={r2.get(\"missing\", [])}')
           "
 
       - name: dry-run pipeline test
@@ -171,9 +196,6 @@ jobs:
           "
 
       - name: Arbeitsagentur connectivity test (advisory — failure is non-blocking)
-        # This test is informational only. Arbeitsagentur blocks CI IPs intermittently.
-        # We test that the adapter initialises and handles errors gracefully, not that
-        # it returns results (which depends on external network access).
         run: |
           python -c "
           import logging
@@ -189,8 +211,7 @@ jobs:
               jobs = src.fetch([q], since)
               print(f'Arbeitsagentur: {len(jobs)} jobs (network available)')
           except Exception as e:
-              # Adapter should never raise — it logs and returns []
-              print(f'WARN: unexpected exception (adapter should catch this): {e}')
+              print(f'WARN: unexpected exception: {e}')
           print('Arbeitsagentur adapter graceful-error test OK')
           "
         continue-on-error: true

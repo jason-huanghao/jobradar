@@ -19,6 +19,58 @@ server_port: 7842
 
 ---
 
+## 🤖 Agent Instructions (for OpenClaw / AI assistants)
+
+> **Goal: configure JobRadar in ≤2 user messages.**
+
+### Minimal-turn flow
+
+```
+Step 1: call setup({})
+        → returns: detected config + prompt_for_user string
+        → show prompt_for_user to user (one message, not multiple questions)
+
+Step 2: if configured=True → go to Step 4
+        if missing=["cv"] → ask user once for CV (path / URL / paste)
+        if missing=["api_key"] → ask user once for key
+        if both missing → ask for both in one message
+
+Step 3: call setup({...with what user provided...})
+        → repeat until configured=True
+
+Step 4: call run_pipeline({"mode": "quick"})
+        → show results (top matches)
+```
+
+### Key behaviours
+
+- **Auto-detects API keys** first — checks OPENCLAW_API_KEY, ARK_API_KEY, ZAI_API_KEY,
+  OPENAI_API_KEY etc. **Never ask the user for a key before calling setup({}).**
+- **Default locations** — Germany-wide (11 major cities + Remote).
+  Only narrow if user explicitly requests specific cities.
+- **GitHub CV URLs** — blob URLs auto-converted to raw. Pass them directly as cv_path.
+- **prompt_for_user field** — always show this to the user verbatim; it contains the
+  right question in the right tone.
+
+### Ideal interaction (3 user messages)
+
+```
+User: set up JobRadar
+
+Agent:  setup({})  →  "API key found (ARK_API_KEY). Just need your CV.
+                        Path, URL, or paste text?"
+
+User:   https://github.com/me/repo/blob/main/cv.md
+
+Agent:  setup({"cv_path": "..."})  →  "✅ Ready! Run job search?"
+
+User:   yes
+
+Agent:  run_pipeline({"mode": "quick"})  →  shows top matches
+```
+
+---
+
 ## ⚡ Quick Install (one command)
 
 Run this in a terminal — it clones, installs, and launches the setup wizard:

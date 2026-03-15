@@ -46,31 +46,51 @@ def web(
 @app.command()
 def update(
     mode: str = typer.Option("full", help="full | quick | score-only | dry-run"),
-    config: Optional[Path] = typer.Option(None, help="Path to config.yaml"),
+    config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
+    limit: Optional[int] = typer.Option(
+        None, "--limit",
+        help="Max results per source per query (overrides config). Useful for quick tests.",
+    ),
 ):
-    """Fetch and score jobs (run this daily)."""
+    """Fetch and score jobs (run this daily).
+
+    Use --mode quick --limit 3 for a fast smoke test (few jobs, fast scoring).
+    """
     from ..config import load_config
     from ..llm.env_probe import probe_llm_env
     from ..pipeline import JobRadarPipeline
 
     cfg = load_config(config)
+
+    # --limit flag overrides quick_max_results and max_results_per_source
+    if limit is not None:
+        cfg.search.quick_max_results = limit
+        cfg.search.max_results_per_source = limit
+
     found, source = probe_llm_env(cfg.llm.text)
     if not found:
         console.print(f"[red]No LLM configured.[/red] {source}")
+        console.print("Set an API key in [cyan].env[/cyan] — e.g. ARK_API_KEY=your_key")
         raise typer.Exit(1)
 
     console.print(f"[dim]LLM: {cfg.llm.text.model} via {source}[/dim]")
+    if limit:
+        console.print(f"[dim]Limit: {limit} results per source per query[/dim]")
     console.print(f"[bold]Running pipeline[/bold] (mode={mode})…")
 
     def on_progress(event):
         msgs = {
             "profile_done":   f"✓ Profile: {event.data.get('name')}",
+            "queries_built":  f"  Queries built: {event.data.get('count')}",
             "source_done":    f"  {event.data.get('source')}: {event.data.get('count')} jobs",
             "fetch_done":     f"→ Fetched: {event.data.get('total')} total",
             "filter_done":    f"→ Filter: {event.data.get('kept')} kept, {event.data.get('dropped')} dropped",
+            "scoring_start":  f"  Scoring {event.data.get('total')} jobs…",
             "score_progress": f"  Scored {event.data.get('scored')}…",
             "gen_done":       f"✨ Generated {event.data.get('generated')} applications",
-            "done":           f"[green]✅ Done — scored: {event.data.get('jobs_scored')}, generated: {event.data.get('jobs_generated')}[/green]",
+            "done":           (f"[green]✅ Done — fetched: {event.data.get('jobs_fetched')}, "
+                               f"scored: {event.data.get('jobs_scored')}, "
+                               f"generated: {event.data.get('jobs_generated')}[/green]"),
             "error":          f"[red]✗ {event.data.get('message')}[/red]",
         }
         msg = msgs.get(event.event)
@@ -87,34 +107,74 @@ def update(
 
 @app.command()
 def status():
-    """Show DB stats."""
+    """Show DB stats and pipeline status."""
     from ..config import load_config
-    from ..storage.db import init_db, get_session
+    from ..storage.db import get_session, init_db
     from ..storage.models import Job, ScoredJobRecord
-    from sqlmodel import select, func
+    from sqlmodel import func, select
 
     cfg = load_config()
     db_path = cfg.resolve_path(cfg.server.db_path)
     init_db(db_path)
 
     with next(get_session(db_path)) as session:
-        job_count = session.exec(select(func.count(Job.id))).one()
+        job_count   = session.exec(select(func.count(Job.id))).one()
         score_count = session.exec(select(func.count(ScoredJobRecord.job_id))).one()
 
     table = Table(show_header=False)
     table.add_column(style="dim")
     table.add_column(style="bold green")
-    table.add_row("Jobs in DB", str(job_count))
+    table.add_row("Jobs in DB",  str(job_count))
     table.add_row("Scored jobs", str(score_count))
-    table.add_row("DB path", str(db_path))
+    table.add_row("DB path",     str(db_path))
     console.print(table)
 
 
 @app.command()
+def health():
+    """Check LLM connectivity and config validity."""
+    from ..config import load_config
+    from ..llm.client import LLMClient
+    from ..llm.env_probe import probe_llm_env
+
+    cfg = load_config()
+
+    # Check LLM
+    found, source = probe_llm_env(cfg.llm.text)
+    if not found:
+        console.print(f"[red]✗ LLM not configured.[/red] {source}")
+        raise typer.Exit(1)
+
+    console.print(f"[dim]LLM source: {source}[/dim]")
+    try:
+        llm = LLMClient(cfg.llm.text)
+        resp = llm.complete("Say OK in one word.", temperature=0.0)
+        console.print(f"[green]✓ LLM ping OK[/green] — response: {resp!r}")
+    except Exception as e:
+        console.print(f"[red]✗ LLM ping failed: {e}[/red]")
+        raise typer.Exit(1)
+
+    # Check CV
+    cv_path = cfg.resolve_path(cfg.candidate.cv_path)
+    if cv_path.exists():
+        console.print(f"[green]✓ CV found:[/green] {cv_path}")
+    else:
+        console.print(f"[yellow]⚠ CV not found:[/yellow] {cv_path}")
+        console.print("  Set candidate.cv_path in config.yaml")
+
+    # Check cache
+    cache_dir = cfg.resolve_path(cfg.server.cache_dir)
+    profile_cache = cache_dir / "candidate_profile.json"
+    if profile_cache.exists():
+        console.print(f"[green]✓ Cached profile:[/green] {profile_cache}")
+    else:
+        console.print(f"[dim]  No cached profile yet (will be created on first run)[/dim]")
+
+
+@app.command()
 def setup():
-    """Interactive setup wizard."""
+    """Copy config.example.yaml → config.yaml if missing."""
     console.print("[bold]JobRadar Setup[/bold]")
-    console.print("Copies [cyan]config.example.yaml[/cyan] → [cyan]config.yaml[/cyan] if missing.\n")
     cfg_path = Path("config.yaml")
     if not cfg_path.exists():
         from shutil import copy
@@ -127,18 +187,19 @@ def setup():
     else:
         console.print("[dim]config.yaml already exists.[/dim]")
     console.print("\nNext steps:")
-    console.print("  1. Edit [cyan]config.yaml[/cyan] — set your CV path and locations")
-    console.print("  2. Set [cyan]ARK_API_KEY[/cyan] (or other LLM key) in [cyan].env[/cyan]")
-    console.print("  3. Run [bold]jobradar update[/bold]")
+    console.print("  1. Edit [cyan]config.yaml[/cyan] — set candidate.cv_path and search.locations")
+    console.print("  2. Set LLM key in [cyan].env[/cyan] — e.g. ARK_API_KEY=your_key")
+    console.print("  3. Run [bold]jobradar health[/bold] to verify")
+    console.print("  4. Run [bold]jobradar update --mode quick --limit 3[/bold] for a quick test")
 
 
 @app.command("install-agent")
 def install_agent():
     """Install a launchd agent to run jobradar update daily at 08:00 (macOS)."""
-    import plistlib, os
-    jobradar_bin = subprocess.run(["which", "jobradar"], capture_output=True, text=True).stdout.strip()
-    if not jobradar_bin:
-        jobradar_bin = str(Path(sys.executable).parent / "jobradar")
+    import plistlib
+    jobradar_bin = subprocess.run(
+        ["which", "jobradar"], capture_output=True, text=True
+    ).stdout.strip() or str(Path(sys.executable).parent / "jobradar")
 
     plist = {
         "Label": "com.jobradar.update",
@@ -156,7 +217,7 @@ def install_agent():
 
     subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True)
     console.print(f"[green]✓ Installed launchd agent:[/green] {plist_path}")
-    console.print("  Runs daily at 08:00. Logs → ~/Library/Logs/jobradar.log")
+    console.print("  Runs daily at 08:00 — logs → ~/Library/Logs/jobradar.log")
 
 
 def main():

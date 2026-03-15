@@ -48,6 +48,7 @@ class SearchConfig(BaseModel):
     postal_code: str = "30159"
     max_results_per_source: int = 50
     max_days_old: int = 14
+    quick_max_results: int = 5   # max results per source in --mode quick
     job_types: list[str] = Field(default_factory=lambda: ["fulltime"])
     custom_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(

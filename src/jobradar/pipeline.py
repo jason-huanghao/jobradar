@@ -116,7 +116,10 @@ class JobRadarPipeline:
         emit("profile_done", name=profile.personal.name)
 
         # Step 2: Build search queries
-        queries = build_queries(profile, cfg)
+        # quick mode: cap both query count AND per-source results
+        quick_limit = cfg.search.quick_max_results if hasattr(cfg.search, 'quick_max_results') else 5
+        max_results_override = quick_limit if mode == "quick" else None
+        queries = build_queries(profile, cfg, max_results_override=max_results_override)
         if mode == "quick":
             queries = queries[:20]
         emit("queries_built", count=len(queries))

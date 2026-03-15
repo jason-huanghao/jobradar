@@ -69,9 +69,21 @@ _CN_CITY_CODES: dict[str, str] = {
 }
 
 
-def build_queries(profile: CandidateProfile, config: AppConfig) -> list[SearchQuery]:
-    """Generate search queries from profile + config, capped sensibly."""
+def build_queries(
+    profile: CandidateProfile,
+    config: AppConfig,
+    max_results_override: int | None = None,
+) -> list[SearchQuery]:
+    """Generate search queries from profile + config, capped sensibly.
+
+    Args:
+        profile: Parsed candidate profile.
+        config:  App configuration.
+        max_results_override: If set, overrides config.search.max_results_per_source
+                              for every query (useful for quick/test runs).
+    """
     locations = config.search.locations or profile.target.locations or ["Germany"]
+    max_results = max_results_override or config.search.max_results_per_source
 
     # ── Determine keyword sets ──────────────────────────────────────
     if config.search.custom_keywords:
@@ -81,7 +93,6 @@ def build_queries(profile: CandidateProfile, config: AppConfig) -> list[SearchQu
     else:
         kw_en = list(profile.target.roles) if profile.target.roles else _derive_keywords(profile)
         kw_de = list(profile.target.roles_de) if profile.target.roles_de else []
-        # Supplement German from vocab table
         for en in kw_en:
             de = _ROLE_DE.get(en)
             if de and de not in kw_de:
@@ -110,10 +121,10 @@ def build_queries(profile: CandidateProfile, config: AppConfig) -> list[SearchQu
     cn_locs = [l for l in locations if l.lower() in _CN_LOCS] or (["上海"] if cn_on else [])
 
     queries: list[SearchQuery] = []
-    extra_base = {
-        "radius_km": config.search.radius_km,
-        "max_results": config.search.max_results_per_source,
-    }
+
+    # extra dict shared by all EU sources — always includes max_results
+    def eu_extra(**kwargs) -> dict:
+        return {"radius_km": config.search.radius_km, "max_results": max_results, **kwargs}
 
     # ── EU sources ─────────────────────────────────────────────────
     for kw in kw_en + kw_de:
@@ -122,48 +133,54 @@ def build_queries(profile: CandidateProfile, config: AppConfig) -> list[SearchQu
             if config.sources.arbeitsagentur.enabled:
                 queries.append(SearchQuery(
                     keyword=kw, location=loc, source="arbeitsagentur",
-                    language=lang, extra=extra_base,
+                    language=lang, extra=eu_extra(),
                 ))
             if config.sources.jobspy.enabled:
                 for board in config.sources.jobspy.boards:
                     queries.append(SearchQuery(
                         keyword=kw, location=loc, source=f"jobspy:{board}",
                         language=lang,
-                        extra={"country": config.sources.jobspy.country, "board": board},
+                        extra=eu_extra(
+                            country=config.sources.jobspy.country,
+                            board=board,
+                        ),
                     ))
             if config.sources.stepstone.enabled:
                 queries.append(SearchQuery(
                     keyword=kw, location=loc, source="stepstone", language=lang,
-                    extra={"postal_code": config.search.postal_code, **extra_base},
+                    extra=eu_extra(postal_code=config.search.postal_code),
                 ))
             if config.sources.xing.enabled:
                 queries.append(SearchQuery(
                     keyword=kw, location=loc, source="xing", language=lang,
+                    extra=eu_extra(),
                 ))
 
     # ── CN sources ─────────────────────────────────────────────────
     for kw in kw_cn:
         for loc in cn_locs:
             city_code = _CN_CITY_CODES.get(loc.lower(), "101020100")
-            base = {"city_code": city_code, "max_results": config.search.max_results_per_source}
+            cn_base = {"city_code": city_code, "max_results": max_results}
             if config.sources.bosszhipin.enabled:
                 queries.append(SearchQuery(
                     keyword=kw, location=loc, source="bosszhipin", language="zh",
-                    extra={**base, "delay_between_requests": config.sources.bosszhipin.delay_between_requests},
+                    extra={**cn_base,
+                           "delay_between_requests": config.sources.bosszhipin.delay_between_requests},
                 ))
             if config.sources.lagou.enabled:
                 queries.append(SearchQuery(
                     keyword=kw, location=loc, source="lagou", language="zh",
-                    extra={**base, "delay_between_requests": config.sources.lagou.delay_between_requests},
+                    extra={**cn_base,
+                           "delay_between_requests": config.sources.lagou.delay_between_requests},
                 ))
             if config.sources.zhilian.enabled:
                 queries.append(SearchQuery(
-                    keyword=kw, location=loc, source="zhilian", language="zh", extra=base,
+                    keyword=kw, location=loc, source="zhilian", language="zh", extra=cn_base,
                 ))
 
     logger.info(
-        "Built %d queries  (%d EN, %d DE, %d CN)",
-        len(queries), len(kw_en), len(kw_de), len(kw_cn),
+        "Built %d queries (%d EN, %d DE, %d CN) max_results=%d",
+        len(queries), len(kw_en), len(kw_de), len(kw_cn), max_results,
     )
     return queries
 

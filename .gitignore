@@ -52,3 +52,6 @@ htmlcov/
 
 # Build
 *.whl
+
+# Personal config (keep config.example.yaml, not config.yaml)
+config.yaml

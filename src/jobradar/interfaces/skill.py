@@ -505,6 +505,7 @@ class JobRadarSkill:
             "generate_application": self._generate_application,
             "get_digest":           self._get_digest,
             "get_report":           self._get_report,
+            "apply_jobs":           self._apply_jobs,
             "get_status":           self._get_status,
         }
         fn = handlers.get(tool_name)
@@ -572,6 +573,41 @@ class JobRadarSkill:
 
     def _get_status(self, _p: dict) -> str:
         return httpx.get(f"{self.base_url}/api/pipeline/status", timeout=10).text
+
+    def _apply_jobs(self, p: dict) -> str:
+        """Apply to top-scoring jobs. dry_run=True by default for safety."""
+        import json as _json
+        try:
+            from ..config import load_config
+            from ..apply.engine import run_apply
+            cfg = load_config()
+            db_path = cfg.resolve_path(cfg.server.db_path)
+            min_score = float(p.get("min_score", cfg.scoring.auto_apply_min_score))
+            dry_run = bool(p.get("dry_run", True))   # safe default
+            platforms = p.get("platforms", ["bosszhipin", "linkedin"])
+            if isinstance(platforms, str):
+                platforms = [x.strip() for x in platforms.split(",")]
+            session = run_apply(
+                db_path=db_path,
+                min_score=min_score,
+                dry_run=dry_run,
+                confirm_each=False,
+                daily_limit=int(p.get("daily_limit", 50)),
+                platforms=platforms,
+            )
+            return _json.dumps({
+                "summary": session.summary,
+                "applied": len(session.applied),
+                "dry_run": dry_run,
+                "results": [
+                    {"job_id": r.job_id, "title": r.title,
+                     "company": r.company, "status": r.status.value,
+                     "message": r.message}
+                    for r in session.results
+                ],
+            }, ensure_ascii=False)
+        except Exception as exc:
+            return _json.dumps({"error": str(exc)})
 
 
 # ── Main entry point ───────────────────────────────────────────────

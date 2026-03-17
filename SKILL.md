@@ -189,6 +189,36 @@ Markdown summary of top-scoring jobs (good for a daily briefing).
 
 ---
 
+### `get_report`
+
+Generate a self-contained HTML report and optionally publish to GitHub Pages.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `min_score` | float | `0.0` | Only include jobs above this score |
+| `publish` | bool | `false` | Push to GitHub Pages and return a public URL |
+
+**Returns:** `{ report_path, job_count, url (if published), message }`
+
+---
+
+### `apply_jobs`
+
+Apply to top-scoring jobs automatically. **Safe by default** — `dry_run=true` unless explicitly set false.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `min_score` | float | `7.5` | Minimum score to apply |
+| `dry_run` | bool | `true` | Preview only — set `false` to actually submit |
+| `platforms` | string/list | `["bosszhipin","linkedin"]` | Which platforms to apply on |
+| `daily_limit` | int | `50` | Max applications this run |
+
+**Requires cookies:** `BOSSZHIPIN_COOKIES` and/or `LINKEDIN_COOKIES` env vars.
+
+**Returns:** `{ summary, applied, dry_run, results: [{job_id, title, company, status, message}] }`
+
+---
+
 ### `get_status`
 
 Status and stats of the last pipeline run and database.

@@ -227,3 +227,78 @@ def test_query_builder_max_results():
     queries = build_queries(profile, cfg, max_results_override=3)
     for q in queries:
         assert q.extra.get("max_results", 3) <= 3
+
+
+# ── 12. Apply history — dedup and daily count ─────────────────────
+
+def test_apply_history(tmp_path):
+    from jobradar.apply.history import ApplyHistory
+
+    h = ApplyHistory(path=tmp_path / "apply_history.json")
+    assert not h.already_applied("job1")
+    assert h.daily_count() == 0
+
+    h.record("job1")
+    assert h.already_applied("job1")
+    assert h.daily_count() == 1
+    assert not h.already_applied("job2")
+
+    h.record("job2")
+    assert h.daily_count() == 2
+    assert h.total_applied() == 2
+
+
+# ── 13. Apply engine — dry-run returns DRY_RUN status ────────────
+
+def test_apply_engine_dry_run(tmp_path):
+    from jobradar.apply.engine import run_apply
+    from jobradar.storage.db import init_db
+    from jobradar.storage.models import Job, ScoredJobRecord
+    from sqlmodel import Session, create_engine
+
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with Session(engine) as session:
+        session.add(Job(
+            id="zboss1", title="AI工程师", company="字节跳动",
+            location="北京", url="https://www.zhipin.com/job/zboss1",
+            description="AI job", source="bosszhipin",
+            date_posted="2026-03-15", job_type="fulltime",
+            salary="", remote=False, raw_extra="{}",
+        ))
+        session.add(ScoredJobRecord(
+            job_id="zboss1", candidate_id="test",
+            overall=8.5, skills_match=9.0, seniority_fit=8.0,
+            location_fit=8.0, language_fit=9.0, visa_friendly=7.0,
+            growth_potential=8.5, reasoning="great match",
+        ))
+        session.commit()
+
+    result = run_apply(
+        db_path=db_path,
+        min_score=7.5,
+        dry_run=True,
+        confirm_each=False,
+        platforms=["bosszhipin"],
+    )
+    assert len(result.results) == 1
+    assert result.results[0].status.value == "dry_run"
+
+
+# ── 14. Boss helper functions ─────────────────────────────────────
+
+def test_boss_helpers():
+    from jobradar.apply.boss import _is_inactive_hr, _format_greeting
+
+    assert _is_inactive_hr("3个月前活跃", 7) is True
+    assert _is_inactive_hr("3天前活跃", 7) is False
+    assert _is_inactive_hr("10天前活跃", 7) is True
+    assert _is_inactive_hr("半年前活跃", 7) is True
+
+    greeting = _format_greeting(
+        "Hello $company, I want $title",
+        {"title": "工程师", "company": "ACME"}
+    )
+    assert greeting == "Hello ACME, I want 工程师"

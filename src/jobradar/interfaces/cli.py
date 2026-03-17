@@ -767,10 +767,75 @@ def install_agent():
     console.print("  Runs daily at 08:00 — logs → ~/Library/Logs/jobradar.log")
 
 
+# ── jobradar apply ────────────────────────────────────────────────
+
+@app.command()
+def apply(
+    min_score: float = typer.Option(7.5, "--min-score", "-s",
+                                    help="Only apply to jobs at or above this score"),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Preview — no actual submissions"),
+    auto: bool = typer.Option(False, "--auto",
+                              help="Apply without confirmation prompts"),
+    limit: Optional[int] = typer.Option(None, "--limit",
+                                        help="Max applications this run"),
+    platforms: Optional[str] = typer.Option(None, "--platforms",
+                                            help="Comma-separated: bosszhipin,linkedin"),
+):
+    """Apply to top-scored jobs automatically.
+
+        jobradar apply                       # interactive confirm each
+        jobradar apply --auto                # autonomous above 7.5
+        jobradar apply --auto --min-score 8  # only best matches
+        jobradar apply --dry-run             # preview without submitting
+    """
+    from ..config import load_config
+    from ..apply.engine import run_apply
+
+    cfg = load_config()
+    db_path = cfg.resolve_path(cfg.server.db_path)
+
+    if not db_path.exists():
+        console.print("[yellow]No database — run [bold]jobradar run[/bold] first.[/yellow]")
+        raise typer.Exit(1)
+
+    platform_list = (
+        [p.strip() for p in platforms.split(",") if p.strip()]
+        if platforms else ["bosszhipin", "linkedin"]
+    )
+    daily_cap = limit or 50
+
+    if dry_run:
+        console.print("[dim]Dry-run mode — no actual submissions[/dim]")
+    console.print(
+        f"[bold]Apply:[/bold] min_score={min_score} "
+        f"platforms={platform_list}{' [dry-run]' if dry_run else ''}"
+    )
+
+    def on_result(r):
+        icons = {"applied": "✅", "skipped": "⏭ ", "failed": "❌",
+                 "blocked": "🚫", "dry_run": "👁 "}
+        icon = icons.get(r.status.value, "?")
+        console.print(f"  {icon} {r.title} @ {r.company} — {r.message}")
+
+    session = run_apply(
+        db_path=db_path,
+        min_score=min_score,
+        dry_run=dry_run,
+        confirm_each=not auto and not dry_run,
+        daily_limit=daily_cap,
+        platforms=platform_list,
+        on_result=on_result,
+    )
+
+    console.print(f"\n[bold green]Done.[/bold green] {session.summary}")
+    if session.applied:
+        console.print(f"  Applied to {len(session.applied)} job(s) today.")
+
+
 def main():
     app()
 
 
 # ── jobradar run (alias for update) ───────────────────────────────
-# Registered separately so both `jobradar run` and `jobradar update` work.
 app.command("run")(update.callback if hasattr(update, "callback") else update)

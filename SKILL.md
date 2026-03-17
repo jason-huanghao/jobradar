@@ -74,20 +74,35 @@ Agent:  run_pipeline({"mode": "quick"})
 
 ---
 
-## ⚡ Quick Install (one command)
+## ⚡ Quick Install
+
+### For OpenClaw users (recommended)
+
+Clone directly into the OpenClaw agents skills directory so it is detected automatically:
+
+```bash
+git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
+cd ~/.agents/skills/jobradar
+pip install -e .
+# Restart OpenClaw gateway to load the skill:
+openclaw gateway stop && sleep 2 && openclaw gateway --force &
+```
+
+### One-command installer (standalone or OpenClaw)
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
 ```
 
-Or manually:
+The installer auto-detects `~/.agents/skills/` (OpenClaw root) and clones there if it exists.
+
+### Manual install (standalone only)
 
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git
-cd jobradar
-pip install -e .          # core EU sources, no Playwright
-pip install -e ".[all]"   # + CN sources + auto-apply (requires Playwright)
-jobradar init             # interactive setup wizard
+git clone https://github.com/jason-huanghao/jobradar.git ~/.jobradar
+cd ~/.jobradar
+pip install -e .
+export JOBRADAR_DIR=~/.jobradar
 ```
 
 ---

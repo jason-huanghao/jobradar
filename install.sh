@@ -6,7 +6,18 @@
 set -e
 
 REPO_URL="https://github.com/jason-huanghao/jobradar.git"
-INSTALL_DIR="${JOBRADAR_DIR:-$HOME/.jobradar}"
+
+# ── Detect install directory ────────────────────────────────────────
+# When used as an OpenClaw skill, install into the agents skills root
+# so OpenClaw can discover it without symlink path restrictions.
+if [ -n "$JOBRADAR_DIR" ]; then
+  INSTALL_DIR="$JOBRADAR_DIR"
+elif [ -d "$HOME/.agents/skills" ]; then
+  # OpenClaw agents-skills-personal root (preferred for skill visibility)
+  INSTALL_DIR="$HOME/.agents/skills/jobradar"
+else
+  INSTALL_DIR="$HOME/.jobradar"
+fi
 
 echo ""
 echo "⚡ JobRadar Installer"
@@ -65,24 +76,18 @@ fi
 export PATH="$VENV/bin:$PATH"
 export JOBRADAR_DIR="$INSTALL_DIR"
 
-# ── Step 5: Run interactive init ────────────────────────────────────
+# ── Step 5: Summary ─────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ JobRadar installed!  Running setup wizard…"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ JobRadar installed at: $INSTALL_DIR"
 echo ""
-
-cd "$INSTALL_DIR"
-$JOBRADAR init
-
+echo "🚀 Quick start:"
+echo "   jobradar run --cv <your-cv-url>    # find jobs using your CV"
+echo "   jobradar report                    # generate HTML report"
+echo "   jobradar health                    # check config"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Quick commands:"
-echo "   jobradar update --mode quick --limit 5   # run pipeline"
-echo "   jobradar web                              # open dashboard"
-echo "   jobradar status                           # show stats"
-echo "   jobradar health                           # check config"
-echo ""
-echo "   Reload shell to use 'jobradar' from anywhere:"
-echo "   source $SHELL_RC"
+if [ -d "$HOME/.agents/skills/jobradar" ]; then
+  echo "🦞 OpenClaw skill: ready"
+  echo "   Restart OpenClaw gateway to load: openclaw gateway stop && openclaw gateway --force &"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -642,7 +642,83 @@ def health():
         console.print("[dim]  No cached profile yet (created on first run)[/dim]")
 
 
-# ── jobradar setup (alias for init -y) ────────────────────────────
+# ── jobradar report ───────────────────────────────────────────────
+
+@app.command()
+def report(
+    publish: bool = typer.Option(False, "--publish", help="Push to GitHub Pages and print URL"),
+    min_score: float = typer.Option(0.0, "--min-score", help="Only include jobs above this score"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open report in browser"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Custom output path"),
+):
+    """Generate a self-contained HTML report of all scored jobs.
+
+    Opens instantly in any browser — no server needed.
+
+        jobradar report                  # generate + open locally
+        jobradar report --publish        # generate + push to GitHub Pages
+        jobradar report --min-score 7    # only include score >= 7
+    """
+    import webbrowser
+    from datetime import datetime
+    from ..config import load_config
+    from ..report.generator import generate_report, jobs_from_db
+
+    cfg = load_config()
+    db_path = cfg.resolve_path(cfg.server.db_path)
+
+    if not db_path.exists():
+        console.print("[yellow]⚠ No database found — run [bold]jobradar run[/bold] first.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print("[dim]Loading jobs from database…[/dim]")
+    jobs = jobs_from_db(db_path, min_score=min_score)
+
+    if not jobs:
+        console.print(f"[yellow]No scored jobs found (min_score={min_score}).[/yellow]")
+        console.print("Run [bold]jobradar run[/bold] to fetch and score jobs first.")
+        raise typer.Exit(1)
+
+    console.print(f"[dim]Generating report for {len(jobs)} jobs…[/dim]")
+    report_path = generate_report(
+        jobs,
+        profile_name=_get_profile_name(cfg),
+        generated_at=datetime.utcnow(),
+        output_path=output,
+    )
+    console.print(f"[green]✓ Report generated:[/green] {report_path}")
+
+    if publish:
+        console.print("[dim]Publishing to GitHub Pages…[/dim]")
+        try:
+            from ..report.publisher import publish_to_github_pages
+            from ..config import _find_config
+            repo_dir = _find_config().parent
+            url = publish_to_github_pages(report_path, repo_dir=repo_dir)
+            console.print(f"[bold green]✓ Published:[/bold green] {url}")
+            console.print(f"\n  Share this URL: [cyan]{url}[/cyan]")
+        except Exception as e:
+            console.print(f"[red]✗ Publish failed: {e}[/red]")
+            console.print("  Ensure GitHub Pages is enabled on the gh-pages branch.")
+            console.print("  Local report still available at: " + str(report_path))
+
+    elif open_browser:
+        webbrowser.open(report_path.as_uri())
+
+
+def _get_profile_name(cfg) -> str:
+    """Try to get candidate name from cached profile YAML or config."""
+    try:
+        profile_yaml = Path(cfg.candidate.profile_yaml)
+        if profile_yaml.exists():
+            import yaml as _yaml
+            data = _yaml.safe_load(profile_yaml.read_text()) or {}
+            return data.get("personal", {}).get("name", "")
+    except Exception:
+        pass
+    return ""
+
+
 
 @app.command()
 def setup():

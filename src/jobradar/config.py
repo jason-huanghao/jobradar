@@ -186,6 +186,17 @@ def load_config(config_path: Path | None = None, cv_override: str | None = None)
     if cv_override:
         config.candidate.cv = cv_override
 
+    # Auto-migrate: if a jobradar.db exists next to the config file, prefer it
+    # over the global default (~/.jobradar/jobradar.db).
+    local_db = config_path.parent / "jobradar.db"
+    if local_db.exists() and config.server.db_path == str(_JOBRADAR_DIR / "jobradar.db"):
+        config.server.db_path = str(local_db)
+
+    # Similarly for cache/memory dir
+    local_cache = config_path.parent / "memory"
+    if local_cache.exists() and config.server.cache_dir == str(_JOBRADAR_DIR / "cache"):
+        config.server.cache_dir = str(local_cache)
+
     from .llm.env_probe import apply_env_override
     apply_env_override(config, silent=True)
 

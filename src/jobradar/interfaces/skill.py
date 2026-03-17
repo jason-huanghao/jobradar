@@ -504,6 +504,7 @@ class JobRadarSkill:
             "get_job_detail":       self._get_job_detail,
             "generate_application": self._generate_application,
             "get_digest":           self._get_digest,
+            "get_report":           self._get_report,
             "get_status":           self._get_status,
         }
         fn = handlers.get(tool_name)
@@ -539,6 +540,35 @@ class JobRadarSkill:
     def _get_digest(self, p: dict) -> str:
         return httpx.get(f"{self.base_url}/api/outputs/digest",
                          params={"min_score": p.get("min_score", 6)}, timeout=30).text
+
+    def _get_report(self, p: dict) -> str:
+        """Generate HTML report and optionally publish to GitHub Pages."""
+        import json as _json
+        from pathlib import Path as _Path
+        try:
+            project_dir = _find_project_dir()
+            from ..config import load_config
+            cfg = load_config()
+            db_path = cfg.resolve_path(cfg.server.db_path)
+            from ..report.generator import generate_report, jobs_from_db
+            min_score = float(p.get("min_score", 0))
+            jobs = jobs_from_db(db_path, min_score=min_score)
+            if not jobs:
+                return _json.dumps({"error": "No scored jobs found. Run the pipeline first."})
+            report_path = generate_report(jobs)
+            result = {"report_path": str(report_path), "job_count": len(jobs)}
+            if p.get("publish", False):
+                from ..report.publisher import publish_to_github_pages
+                url = publish_to_github_pages(report_path, repo_dir=project_dir)
+                result["url"] = url
+                result["message"] = f"Report published: {url}"
+            else:
+                result["message"] = f"Report saved locally: {report_path}"
+            return _json.dumps(result, ensure_ascii=False)
+        except Exception as exc:
+            return _json.dumps({"error": str(exc)})
+
+
 
     def _get_status(self, _p: dict) -> str:
         return httpx.get(f"{self.base_url}/api/pipeline/status", timeout=10).text

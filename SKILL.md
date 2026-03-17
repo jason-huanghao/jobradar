@@ -1,21 +1,15 @@
+---
+name: jobradar
+description: AI-powered job search agent — scrapes Arbeitsagentur, StepStone, XING, Indeed, Google Jobs, BOSS直聘, 拉勾, 智联 → scores jobs against your CV → generates cover letters for top matches. Use when a user wants to find jobs, search for positions, score job listings against their CV, generate cover letters, or auto-apply to positions.
+version: 0.3.0
+author: jason-huanghao
+entry_point: jobradar.interfaces.skill:run_skill
+---
+
 # JobRadar — OpenClaw Skill
 
 AI-powered job search agent: scrapes Arbeitsagentur, StepStone, XING, Indeed, Google Jobs,
 BOSS直聘, 拉勾, 智联 → scores against your CV → generates cover letters for top matches.
-
----
-
-## Skill Metadata
-
-```yaml
-skill_id: jobradar
-display_name: JobRadar — AI Job Search
-version: 0.3.0
-author: jason-huanghao
-entry_point: jobradar.interfaces.skill:run_skill
-requires_server: true
-server_port: 7842
-```
 
 ---
 

@@ -1,110 +1,46 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# JobRadar v2 — config.example.yaml
-# Copy to config.yaml and fill in your values.
-# ─────────────────────────────────────────────────────────────────────────────
+# JobRadar — configuration
+# Only  candidate.cv  is required. Everything else has sensible defaults.
+#
+# CV accepts: local file path (.md / .pdf / .docx / .txt), URL, or leave blank
+# to be prompted on first run.
+#
+# Examples:
+#   cv: ./cv_current.md
+#   cv: https://github.com/you/repo/blob/main/cv.md
+#   cv: /Users/you/Documents/resume.pdf
 
-# ── LLM ───────────────────────────────────────────────────────────────────────
-llm:
-  text:
-    # Provider priority: env vars are checked first (see .env.example)
-    # Supported: volcengine | openai | deepseek | ollama | lm_studio | z_ai
-    provider: volcengine              # or: openai, deepseek, ollama, z_ai
-    model: doubao-seed-2.0-code       # model name for the provider above
-    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
-    api_key: ""                       # leave blank — use env var ARK_API_KEY
-    timeout: 120
-    max_retries: 3
-    temperature: 0.1
-
-# ── Candidate ─────────────────────────────────────────────────────────────────
 candidate:
-  # Point to your CV. Supports .md, .txt, .pdf, .docx
-  cv_path: ./cv/cv_current.md
-  # Or: cv_url: https://example.com/myresume.pdf
+  cv: ""   # ← fill this in, or run: jobradar run --cv <path-or-url>
 
-# ── Search ────────────────────────────────────────────────────────────────────
-search:
-  # Comma-separated city names or "Remote"
-  locations:
-    - Hannover
-    - Berlin
-    - Hamburg
-    - Remote
+# ── Optional overrides (defaults shown) ───────────────────────────────────────
 
-  # Only jobs posted within this many days
-  max_days_old: 30
+# search:
+#   locations: []           # empty = worldwide; e.g. [Berlin, Hamburg, Remote]
+#   max_results: 20         # jobs per source per query
+#   max_days_old: 14
+#   exclude_keywords:       # drop titles matching these (case-insensitive)
+#     - Praktikum
+#     - Werkstudent
+#     - Ausbildung
+#     - internship
 
-  # Keyword radius for location-based sources (km)
-  radius_km: 50
+# scoring:
+#   min_score: 6.0            # minimum score to appear in digest/report
+#   auto_apply_min_score: 7.5 # auto-apply above this (requires jobradar[apply])
 
-  # Max results per source per keyword — keep it reasonable (20–100)
-  max_results_per_source: 50
+# sources:
+#   # EU sources are ON by default (no extra setup needed)
+#   # CN sources require:  pip install "jobradar[cn]"  + cookie/network setup
+#   bosszhipin:
+#     enabled: false   # set BOSSZHIPIN_COOKIES in .env
+#   lagou:
+#     enabled: false   # requires mainland China network
+#   zhilian:
+#     enabled: false   # requires mainland China network
 
-  # Optional: override profile-derived keywords entirely
-  # custom_keywords: []
+# report:
+#   auto_open: true    # open HTML report in browser after generation
+#   # github_pages_repo: jason-huanghao/jobradar  # enable via gh-cli skill
 
-  # Optional: your postal code (for StepStone)
-  postal_code: ""
-
-  # Jobs whose title or description contains these strings are dropped
-  # before LLM scoring (case-insensitive)
-  exclude_keywords:
-    - "Senior Principal"
-    - Praktikum
-    - Werkstudent
-    - Ausbildung
-
-  # Companies to skip entirely (exact match, case-insensitive)
-  exclude_companies: []
-
-# ── Sources ───────────────────────────────────────────────────────────────────
-sources:
-  arbeitsagentur:
-    enabled: true
-
-  jobspy:
-    enabled: true
-    # Supported boards: indeed, google, glassdoor, linkedin (PDF only)
-    boards:
-      - indeed
-      - google
-    country: germany   # used for Indeed country filter
-
-  stepstone:
-    enabled: true      # HTML scraper (httpx + BeautifulSoup)
-
-  xing:
-    enabled: true      # HTML scraper (httpx + BeautifulSoup)
-
-  # ── Chinese platforms (only useful if you're targeting CN roles) ──────────
-  bosszhipin:
-    enabled: false
-    # Set BOSSZHIPIN_COOKIES env var, or place cookies in memory/bosszhipin_cookies.json
-    delay_between_requests: 2.0  # seconds between page requests
-
-  lagou:
-    enabled: false
-    delay_between_requests: 2.0
-
-  zhilian:
-    enabled: false
-
-# ── Scoring ───────────────────────────────────────────────────────────────────
-scoring:
-  # LLM batch size per API call (5 is a good balance)
-  batch_size: 5
-
-  # Jobs scoring at or above this threshold get CV + cover letter generated
-  min_score_application: 7.0
-
-# ── Server ────────────────────────────────────────────────────────────────────
-server:
-  host: 127.0.0.1
-  port: 7842
-  open_browser: true
-
-  # SQLite database path (relative to config.yaml location)
-  db_path: ./data/jobradar.db
-
-  # Cache directory for parsed profiles and intermediate files
-  cache_dir: ./data/cache
+# server:
+#   port: 7842         # skill server port

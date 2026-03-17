@@ -135,16 +135,20 @@ def _is_configured() -> tuple[bool, str]:
     # Check CV
     cfg_path = project_dir / "config.yaml"
     if cfg_path.exists():
-        import re
-        match = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
-        if match:
-            cv_rel = match.group(1).strip().strip("\"'")
-            cv_abs = (project_dir / cv_rel).resolve()
-            if not cv_abs.exists():
-                return False, (
-                    f"CV file not found: {cv_rel}\n"
-                    "Call the 'setup' tool with cv_path or cv_content parameter."
-                )
+        cfg_txt = cfg_path.read_text()
+        m = re.search(r'^\s*cv:\s*(.+)', cfg_txt, re.MULTILINE) or \
+            re.search(r'^\s*cv_path:\s*(.+)', cfg_txt, re.MULTILINE)
+        if m:
+            cv_val = m.group(1).strip().strip("\"'")
+            if cv_val.startswith("http"):
+                pass  # URL — always ok
+            else:
+                cv_abs = (project_dir / cv_val).resolve()
+                if not cv_abs.exists():
+                    return False, (
+                        f"CV file not found: {cv_val}\n"
+                        "Call the 'setup' tool with cv_path or cv_content parameter."
+                    )
 
     return True, "ok"
 
@@ -196,11 +200,17 @@ def _handle_setup(params: dict) -> str:
     current_cv = None
     cv_exists = False
     if cfg_path.exists():
-        m = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
+        cfg_txt = cfg_path.read_text()
+        # Support both new `cv:` and legacy `cv_path:` keys
+        m = re.search(r'^\s*cv:\s*(.+)', cfg_txt, re.MULTILINE) or \
+            re.search(r'^\s*cv_path:\s*(.+)', cfg_txt, re.MULTILINE)
         if m:
             current_cv = m.group(1).strip().strip("\'\"")
-            cv_abs = (project_dir / current_cv).resolve()
-            cv_exists = cv_abs.exists()
+            if current_cv and not current_cv.startswith("http"):
+                cv_abs = (project_dir / current_cv).resolve()
+                cv_exists = cv_abs.exists()
+            elif current_cv.startswith("http"):
+                cv_exists = True  # treat URL as always present
 
     current_locs = []
     if cfg_path.exists():
@@ -311,7 +321,8 @@ def _handle_setup(params: dict) -> str:
         dest = cv_dir / "cv_current.md"
         dest.write_text(cv_text, encoding="utf-8")
         txt2 = cfg_path.read_text()
-        txt2 = re.sub(r'cv_path:.*', 'cv_path: ./cv/cv_current.md', txt2)
+        txt2 = re.sub(r'^\s*cv_path:.*', 'candidate:\n  cv: ./cv/cv_current.md', txt2, flags=re.MULTILINE)
+        txt2 = re.sub(r'^\s*cv:\s*.*', '  cv: ./cv/cv_current.md', txt2, flags=re.MULTILINE)
         cfg_path.write_text(txt2)
         results["cv"] = f"saved from text ({len(cv_text)} chars)"
         cv_exists = True
@@ -329,7 +340,7 @@ def _handle_setup(params: dict) -> str:
                 dest = cv_dir / f"cv_current{ext}"
                 dest.write_bytes(resp.content)
                 txt2 = cfg_path.read_text()
-                txt2 = re.sub(r'cv_path:.*', f'cv_path: ./cv/cv_current{ext}', txt2)
+                txt2 = re.sub(r'^\s*(cv|cv_path):.*', f'  cv: ./cv/cv_current{ext}', txt2, flags=re.MULTILINE)
                 cfg_path.write_text(txt2)
                 results["cv"] = f"downloaded → cv/cv_current{ext}"
                 cv_exists = True
@@ -349,7 +360,7 @@ def _handle_setup(params: dict) -> str:
                     results["cv"] = f"copied → cv/cv_current{ext}"
                 txt2 = cfg_path.read_text()
                 cv_rel = f"./cv/cv_current{ext}"
-                txt2 = re.sub(r'cv_path:.*', f'cv_path: {cv_rel}', txt2)
+                txt2 = re.sub(r'^\s*(cv|cv_path):.*', f'  cv: {cv_rel}', txt2, flags=re.MULTILINE)
                 cfg_path.write_text(txt2)
                 cv_exists = True
             else:
@@ -392,11 +403,16 @@ def _handle_setup(params: dict) -> str:
 
     # ── Final status ───────────────────────────────────────────────
     var2, _, _ = _detect_api_key()
-    cv_m = re.search(r'cv_path:\s*(.+)', cfg_path.read_text())
+    cv_m = re.search(r'^\s*cv:\s*(.+)', cfg_path.read_text(), re.MULTILINE) or \
+           re.search(r'^\s*cv_path:\s*(.+)', cfg_path.read_text(), re.MULTILINE)
     cv_final_ok = False
     if cv_m:
-        cv_abs = (project_dir / cv_m.group(1).strip().strip("'\"")).resolve()
-        cv_final_ok = cv_abs.exists()
+        cv_val = cv_m.group(1).strip().strip("'\"")
+        if cv_val.startswith("http"):
+            cv_final_ok = True
+        else:
+            cv_abs = (project_dir / cv_val).resolve()
+            cv_final_ok = cv_abs.exists()
 
     configured = bool(var2 and cv_final_ok)
     missing2 = ([" api_key"] if not var2 else []) + (["cv"] if not cv_final_ok else [])
@@ -557,28 +573,25 @@ def run_skill(tool_name: str, params_json: str = "{}") -> str:
 # ── Minimal fallback config ────────────────────────────────────────
 
 _MINIMAL_CONFIG = """\
-llm:
-  text:
-    provider: volcengine
-    model: doubao-seed-2.0-code
-    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
-    api_key_env: ARK_API_KEY
-    temperature: 0.3
-    max_tokens: 4096
-    rate_limit_delay: 2.0
 candidate:
-  cv_path: ./cv/cv_current.md
+  cv: ""
+
 search:
-  locations:
-    - Germany
-  max_results_per_source: 50
-  quick_max_results: 5
+  locations: []
+  max_results_per_source: 20
   max_days_old: 14
   exclude_keywords:
     - Praktikum
     - Werkstudent
     - internship
     - Ausbildung
+
+scoring:
+  min_score_digest: 6.0
+  min_score_application: 7.0
+  auto_apply_min_score: 7.5
+  batch_size: 5
+
 sources:
   arbeitsagentur:
     enabled: true
@@ -596,15 +609,10 @@ sources:
     enabled: false
   zhilian:
     enabled: false
-scoring:
-  min_score_application: 7.0
-  batch_size: 5
+
 server:
   host: 127.0.0.1
   port: 7842
-  open_browser: true
-  db_path: ./jobradar.db
-  cache_dir: ./memory
 """
 
 

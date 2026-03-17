@@ -111,8 +111,13 @@ class JobRadarPipeline:
 
         # Step 1: Parse CV → profile
         cache_dir = cfg.resolve_path(cfg.server.cache_dir)
-        cv_source = cfg.candidate.cv_url or cfg.candidate.cv_path
-        profile = ingest(str(cfg.resolve_path(cv_source)), self.llm, cache_dir=cache_dir)
+        cv_source = cfg.candidate.effective_cv()
+        # URL → pass as-is; local path → resolve relative to config dir
+        if cv_source.startswith("http://") or cv_source.startswith("https://"):
+            cv_resolved = cv_source
+        else:
+            cv_resolved = str(cfg.resolve_path(cv_source))
+        profile = ingest(cv_resolved, self.llm, cache_dir=cache_dir)
         emit("profile_done", name=profile.personal.name)
 
         # Step 2: Build search queries

@@ -428,37 +428,31 @@ def _find_project_dir() -> Path:
 
 
 _MINIMAL_CONFIG = """\
-llm:
-  text:
-    provider: volcengine
-    model: doubao-seed-2.0-code
-    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
-    api_key_env: ARK_API_KEY
-    temperature: 0.3
-    max_tokens: 4096
-    rate_limit_delay: 2.0
 candidate:
-  cv_path: ./cv/cv_current.md
+  cv: ""
+
 search:
-  locations:
-    - Berlin
-    - Remote
-  max_results_per_source: 50
-  quick_max_results: 5
+  locations: []
+  max_results_per_source: 20
   max_days_old: 14
   exclude_keywords:
     - Praktikum
     - Werkstudent
     - internship
     - Ausbildung
+
+scoring:
+  min_score_digest: 6.0
+  min_score_application: 7.0
+  auto_apply_min_score: 7.5
+  batch_size: 5
+
 sources:
   arbeitsagentur:
     enabled: true
   jobspy:
     enabled: true
-    boards:
-      - indeed
-      - google
+    boards: [indeed, google]
     country: germany
   stepstone:
     enabled: true
@@ -470,15 +464,10 @@ sources:
     enabled: false
   zhilian:
     enabled: false
-scoring:
-  min_score_application: 7.0
-  batch_size: 5
+
 server:
   host: 127.0.0.1
   port: 7842
-  open_browser: true
-  db_path: ./jobradar.db
-  cache_dir: ./memory
 """
 
 
@@ -516,10 +505,14 @@ def web(
 @app.command()
 def update(
     mode: str = typer.Option("full", help="full | quick | score-only | dry-run"),
+    cv: Optional[str] = typer.Option(
+        None, "--cv",
+        help="CV source: file path (.md/.pdf/.docx/.txt) or URL. Overrides config.",
+    ),
     config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
     limit: Optional[int] = typer.Option(
         None, "--limit",
-        help="Max results per source per query. Useful for quick tests (e.g. --limit 3).",
+        help="Max results per source per query (e.g. --limit 3 for quick tests).",
     ),
 ):
     """Fetch and score jobs (run this daily).
@@ -530,7 +523,7 @@ def update(
     from ..llm.env_probe import probe_llm_env
     from ..pipeline import JobRadarPipeline
 
-    cfg = load_config(config)
+    cfg = load_config(config, cv_override=cv)
 
     if limit is not None:
         cfg.search.quick_max_results = limit
@@ -627,11 +620,18 @@ def health():
         console.print(f"[red]✗ LLM ping failed: {e}[/red]")
         raise typer.Exit(1)
 
-    cv_path = cfg.resolve_path(cfg.candidate.cv_path)
-    if cv_path.exists():
-        console.print(f"[green]✓ CV found:[/green] {cfg.candidate.cv_path}")
+    cv_source = cfg.candidate.effective_cv()
+    if cv_source and not cv_source.startswith("http"):
+        cv_path = cfg.resolve_path(cv_source)
+        if cv_path.exists():
+            console.print(f"[green]✓ CV found:[/green] {cv_source}")
+        else:
+            console.print(f"[yellow]⚠ CV not found:[/yellow] {cv_source}")
+            console.print("  Run [bold]jobradar init[/bold] to provide your CV.")
+    elif cv_source.startswith("http"):
+        console.print(f"[green]✓ CV URL:[/green] {cv_source}")
     else:
-        console.print(f"[yellow]⚠ CV not found:[/yellow] {cfg.candidate.cv_path}")
+        console.print("[yellow]⚠ No CV configured.[/yellow]")
         console.print("  Run [bold]jobradar init[/bold] to provide your CV.")
 
     cache_dir = cfg.resolve_path(cfg.server.cache_dir)
@@ -693,3 +693,8 @@ def install_agent():
 
 def main():
     app()
+
+
+# ── jobradar run (alias for update) ───────────────────────────────
+# Registered separately so both `jobradar run` and `jobradar update` work.
+app.command("run")(update.callback if hasattr(update, "callback") else update)

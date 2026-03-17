@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openclaw-jobradar"
-version = "0.2.0"
-description = "AI-powered job search agent for Germany & China tech roles"
+version = "0.3.0"
+description = "AI-powered job search agent — scrape, score, apply. OpenClaw skill."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-only"
@@ -20,52 +20,36 @@ dependencies = [
     "typer>=0.12.0",
     # Storage
     "sqlmodel>=0.0.18",
-    # Job sources
+    # Job sources (EU, no Playwright required)
     "python-jobspy>=1.1.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=5.0.0",
-    # CV parsing
+    # CV readers
     "pypdf>=4.0.0",
     "python-docx>=1.1.0",
     "html2text>=2024.2.26",
-    # Output
+    # Output & utilities
     "openpyxl>=3.1.0",
     "rapidfuzz>=3.9.0",
-    # Template engine for prompts
     "jinja2>=3.1.0",
-    # Date parsing
     "python-dateutil>=2.9.0",
+    # Skill server (lightweight FastAPI, no dashboard deps)
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-multipart>=0.0.5",
 ]
 
 [project.optional-dependencies]
-web = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.23.0",
-    "python-multipart>=0.0.5",
-    "aiofiles>=23.2.0",
-    "websockets>=12.0",
-]
-playwright = [
-    "playwright>=1.40.0",
-]
-dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "pytest-mock>=3.12",
-    "ruff>=0.4.0",
-]
-all = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.23.0",
-    "python-multipart>=0.0.5",
-    "aiofiles>=23.2.0",
-    "websockets>=12.0",
-    "playwright>=1.40.0",
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "pytest-mock>=3.12",
-    "ruff>=0.4.0",
-]
+# CN job platforms — Boss直聘, Lagou, Zhilian (requires Playwright)
+cn = ["playwright>=1.40.0"]
+# Auto-apply engine — Boss直聘 greet, LinkedIn Easy Apply (requires Playwright)
+apply = ["playwright>=1.40.0"]
+# Web dashboard extras — WebSocket pipeline progress, async file serving
+web = ["aiofiles>=23.2.0", "websockets>=12.0"]
+# Development
+dev = ["ruff>=0.4.0", "pytest>=8.0", "pytest-asyncio>=0.23", "pytest-mock>=3.12"]
+# Everything (note: playwright installed once, shared by cn + apply)
+all = ["openclaw-jobradar[cn,apply,web,dev]"]
 
 [project.scripts]
 jobradar = "jobradar.interfaces.cli:main"

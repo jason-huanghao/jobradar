@@ -10,7 +10,7 @@ BOSS直聘, 拉勾, 智联 → scores against your CV → generates cover letter
 ```yaml
 skill_id: jobradar
 display_name: JobRadar — AI Job Search
-version: 0.2.0
+version: 0.3.0
 author: jason-huanghao
 entry_point: jobradar.interfaces.skill:run_skill
 requires_server: true
@@ -23,164 +23,143 @@ server_port: 7842
 
 > **Goal: configure JobRadar in ≤2 user messages.**
 
-### Minimal-turn flow
+### Minimal-turn setup flow
 
 ```
 Step 1: call setup({})
+        → auto-detects API key from environment
         → returns: detected config + prompt_for_user string
-        → show prompt_for_user to user (one message, not multiple questions)
+        → show prompt_for_user to user verbatim (one message only)
 
-Step 2: if configured=True → go to Step 4
-        if missing=["cv"] → ask user once for CV (path / URL / paste)
-        if missing=["api_key"] → ask user once for key
+Step 2: if configured=True → skip to Step 4
+        if missing=["cv"] → user provides CV (path / URL / paste text)
+        if missing=["api_key"] → user provides key
         if both missing → ask for both in one message
 
 Step 3: call setup({...with what user provided...})
         → repeat until configured=True
 
 Step 4: call run_pipeline({"mode": "quick"})
-        → show results (top matches)
+        → show top matches to user
 ```
 
 ### Key behaviours
 
-- **Auto-detects API keys** first — checks OPENCLAW_API_KEY, ARK_API_KEY, ZAI_API_KEY,
-  OPENAI_API_KEY etc. **Never ask the user for a key before calling setup({}).**
-- **Default locations** — Germany-wide (11 major cities + Remote).
-  Only narrow if user explicitly requests specific cities.
-- **GitHub CV URLs** — blob URLs auto-converted to raw. Pass them directly as cv_path.
-- **prompt_for_user field** — always show this to the user verbatim; it contains the
-  right question in the right tone.
+- **Auto-detects LLM keys first** — checks Claude OAuth, OPENCLAW_API_KEY, ARK_API_KEY,
+  ZAI_API_KEY, OPENAI_API_KEY etc. **Never ask for a key before calling setup({}).**
+- **CV accepts anything** — local path (.md/.pdf/.docx/.txt), GitHub URL, or pasted text.
+  GitHub blob URLs are auto-converted to raw format.
+- **Default locations** — worldwide (empty = no filter). Narrow only if user requests cities.
+- **prompt_for_user field** — always show this verbatim; it contains the right question.
 
-### Ideal interaction (3 user messages)
+### Ideal interaction (3 user messages total)
 
 ```
-User: set up JobRadar
+User:   set up JobRadar
 
-Agent:  setup({})  →  "API key found (ARK_API_KEY). Just need your CV.
-                        Path, URL, or paste text?"
+Agent:  setup({})
+        → "API key found (OPENCLAW_API_KEY). Just need your CV.
+           Path, URL, or paste your CV text?"
 
-User:   https://github.com/me/repo/blob/main/cv.md
+User:   https://github.com/jason-huanghao/daily-rss-digest/blob/main/cv_current.md
 
-Agent:  setup({"cv_path": "..."})  →  "✅ Ready! Run job search?"
+Agent:  setup({"cv_path": "https://github.com/.../cv_current.md"})
+        → "✅ Ready! Run a quick job search now?"
 
 User:   yes
 
-Agent:  run_pipeline({"mode": "quick"})  →  shows top matches
+Agent:  run_pipeline({"mode": "quick"})
+        → shows top matches
 ```
 
 ---
 
 ## ⚡ Quick Install (one command)
 
-Run this in a terminal — it clones, installs, and launches the setup wizard:
-
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
 ```
 
-The wizard will ask for:
-1. Your LLM API key (auto-detects from environment if already set)
-2. Your CV (file path, URL, or paste text directly)
-3. Your target cities
-
----
-
-## Manual Installation
+Or manually:
 
 ```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar
-pip install -e ".[all]"
-jobradar init        # interactive setup wizard
-jobradar update --mode quick --limit 5   # quick test
+pip install -e .          # core EU sources, no Playwright
+pip install -e ".[all]"   # + CN sources + auto-apply (requires Playwright)
+jobradar init             # interactive setup wizard
 ```
 
 ---
 
-## Skill Tools (for OpenClaw agents)
+## Skill Tools
 
-> **First time?** Call `setup` before any other tool.
-> JobRadar auto-detects your OpenClaw/LLM API key — just provide your CV.
+> **First time? Call `setup` before any other tool.**
+> JobRadar auto-detects your API key — just provide your CV.
 
 ---
 
-### `setup` ← **Start here**
+### `setup` ← Start here
+
 Configure JobRadar (API key + CV + locations). Works without any pre-existing config.
 
-**Parameters** (all optional — provide what you have):
+**Parameters** (all optional):
+
 | Name | Type | Description |
 |------|------|-------------|
-| `api_key` | string | `"ENV_VAR=value"` e.g. `"ARK_API_KEY=abc123"` or `"ZAI_API_KEY=xxx"` |
-| `cv_path` | string | Local file path (`.md`, `.pdf`, `.docx`, `.txt`) or URL |
-| `cv_content` | string | Raw CV text in Markdown (paste directly) |
-| `locations` | string | Comma-separated e.g. `"Berlin,Hannover,Remote"` |
-| `check_only` | bool | Just report current config status without changing anything |
+| `api_key` | string | `"ENV_VAR=value"` e.g. `"ARK_API_KEY=abc123"` |
+| `cv_path` | string | File path or URL (.md / .pdf / .docx / .txt / GitHub URL) |
+| `cv_content` | string | Raw CV text pasted directly as Markdown |
+| `locations` | string | Comma-separated e.g. `"Berlin,Hamburg,Remote"` (default: worldwide) |
+| `check_only` | bool | Report current config state without writing anything |
 
-**Auto-detection:** If `api_key` is omitted, JobRadar checks the environment for
-`OPENCLAW_API_KEY`, `ARK_API_KEY`, `ZAI_API_KEY`, `OPENAI_API_KEY`, etc. automatically.
+**Returns:** `{ status, configured, missing, detected, prompt_for_user }`
 
 **Example calls:**
+
 ```json
-// Minimal — let JobRadar auto-detect key, user provides CV path
-setup({"cv_path": "/Users/jason/Documents/cv.pdf", "locations": "Berlin,Remote"})
-
-// Provide everything explicitly
-setup({
-  "api_key": "ARK_API_KEY=your_key_here",
-  "cv_path": "/Users/jason/cv.pdf",
-  "locations": "Berlin,Hannover,Remote"
-})
-
-// Paste CV as text
-setup({
-  "cv_content": "# Jane Doe\nSoftware Engineer with Python, ML...",
-  "locations": "Berlin,Remote"
-})
-
-// Just check current status
+// Check current state first
 setup({"check_only": true})
-```
 
-**Returns:** `{ status, project_dir, api_key, cv, locations, configured, next_step }`
+// Provide CV via GitHub URL (blob URL auto-converted to raw)
+setup({"cv_path": "https://github.com/me/repo/blob/main/cv.md"})
+
+// Paste CV text directly
+setup({"cv_content": "# Jane Doe\nSoftware Engineer, Python, ML..."})
+
+// Provide everything at once
+setup({"api_key": "ARK_API_KEY=xxx", "cv_path": "/Users/me/cv.pdf", "locations": "Berlin,Remote"})
+```
 
 ---
 
 ### `run_pipeline`
-Fetch jobs from all sources, score against CV, generate cover letters for top matches.
+
+Fetch + score + generate cover letters for top matches.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | `"quick"` | `full` \| `quick` \| `score-only` \| `dry-run` |
-
-**Example invocations:**
-> "Find new AI engineer jobs for me"
-> "Run a quick job search"
-> "Score all existing jobs against my CV"
 
 **Returns:** `{ run_id, status, jobs_fetched, jobs_new, jobs_scored, jobs_generated }`
 
 ---
 
 ### `list_jobs`
+
 Show top-scoring jobs from the database.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `min_score` | float | `6.0` | Minimum score 0–10 |
-| `source` | string | `""` | Filter: `arbeitsagentur`, `stepstone`, `xing`, `jobspy:indeed` |
+| `min_score` | float | `6.0` | Minimum match score (0–10) |
+| `source` | string | `""` | Filter by source: `arbeitsagentur`, `stepstone`, `xing`, `jobspy:indeed` |
 | `limit` | int | `20` | Max results |
-
-> "Show me the best job matches"
-> "What jobs scored above 8?"
-> "List 5 jobs from StepStone"
-
-**Returns:** `{ jobs: [{id, title, company, location, score, source, url, ...}], total }`
 
 ---
 
 ### `get_job_detail`
-Full description + score breakdown for a specific job.
+
+Full description + score breakdown for one job.
 
 | Param | Required | Description |
 |-------|----------|-------------|
@@ -189,112 +168,126 @@ Full description + score breakdown for a specific job.
 ---
 
 ### `generate_application`
-Generate a tailored CV summary + cover letter for one job.
+
+Generate tailored CV summary + cover letter for one job.
 
 | Param | Required | Description |
 |-------|----------|-------------|
 | `job_id` | ✓ | Job ID from `list_jobs` |
-
-> "Generate a cover letter for the Bosch AI role"
 
 **Returns:** `{ cv_optimized_md, cover_letter_md, gaps }`
 
 ---
 
 ### `get_digest`
+
 Markdown summary of top-scoring jobs (good for a daily briefing).
 
 | Param | Type | Default |
 |-------|------|---------|
 | `min_score` | float | `6.0` |
 
-> "Give me today's job digest"
-> "Summarize the best matches"
-
 ---
 
 ### `get_status`
-Status and stats of the last pipeline run.
 
-> "When did JobRadar last run?"
-> "How many jobs are in the database?"
+Status and stats of the last pipeline run and database.
 
 ---
 
-## Recommended Agent Flow
-
-```
-1. setup({"check_only": true})                     → check if configured
-2. setup({"cv_path": "...", "locations": "..."})   → configure if needed
-3. run_pipeline({"mode": "quick"})                 → fetch + score jobs
-4. list_jobs({"min_score": 7})                     → show top matches
-5. generate_application({"job_id": "..."})         → create cover letter
-6. get_digest({})                                  → daily summary
-```
-
----
-
-## CLI Reference (terminal)
+## CLI Reference
 
 ```bash
-jobradar init                            # Interactive setup wizard
-jobradar update --mode quick --limit 5  # Fast test (cap per-source results)
-jobradar update                          # Full daily pipeline
-jobradar web                             # Dashboard at http://localhost:7842
-jobradar status                          # DB stats
-jobradar health                          # Check LLM + CV
-jobradar install-agent                   # macOS launchd daily agent
+jobradar run --cv <url_or_path>      # primary command — fetch + score
+jobradar run --mode quick            # faster scan (fewer results per source)
+jobradar run --mode full             # thorough daily run
+jobradar run --mode dry-run          # validate config, no network calls
+
+jobradar health                      # check LLM ping + CV file
+jobradar status                      # DB stats (job count, scored count)
+jobradar init                        # interactive setup wizard
+jobradar web                         # start dashboard at http://localhost:7842
+jobradar install-agent               # macOS launchd daily agent at 08:00
 ```
 
 ---
 
-## Configuration Reference
+## Configuration
 
-Key settings in `config.yaml` (auto-generated by `jobradar init`):
+Minimal `config.yaml` — only CV is required, everything else defaults:
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `candidate.cv_path` | `./cv/cv_current.md` | Your CV file |
-| `search.locations` | `[Berlin, Remote]` | Target cities |
-| `search.max_results_per_source` | `50` | Results per source (full mode) |
-| `search.quick_max_results` | `5` | Results per source (quick mode) |
-| `search.max_days_old` | `14` | Only recent jobs |
-| `scoring.min_score_application` | `7.0` | Auto-generate docs above this |
-| `server.port` | `7842` | Dashboard port |
+```yaml
+candidate:
+  cv: ""   # path, URL, or leave blank and use --cv flag
+```
+
+Full options (all have defaults, uncomment to override):
+
+```yaml
+# search:
+#   locations: []          # empty = worldwide
+#   max_results_per_source: 20
+#   max_days_old: 14
+
+# scoring:
+#   min_score_digest: 6.0
+#   min_score_application: 7.0
+#   auto_apply_min_score: 7.5
+
+# sources:
+#   bosszhipin:
+#     enabled: false       # needs: BOSSZHIPIN_COOKIES env var + pip install ".[all]"
+#   lagou:
+#     enabled: false       # needs: mainland China network
+#   zhilian:
+#     enabled: false
+
+# server:
+#   port: 7842
+```
+
+---
+
+## LLM Provider Auto-Detection
+
+JobRadar detects your LLM automatically in this priority order — no manual config needed:
+
+| Priority | Source | Notes |
+|----------|--------|-------|
+| 0 | Claude OAuth | `~/.claude/.credentials.json` — free for Claude Code subscribers |
+| 1 | `OPENCLAW_API_KEY` | OpenClaw runtime key via Z.AI proxy |
+| 2 | `ZAI_API_KEY` | Z.AI direct |
+| 3 | `ANTHROPIC_API_KEY` | Anthropic API |
+| 4 | `ARK_API_KEY` | Volcengine Ark (doubao) |
+| 5 | `OPENAI_API_KEY` | OpenAI |
+| 6 | `DEEPSEEK_API_KEY` | DeepSeek |
+| 7 | `OPENROUTER_API_KEY` | OpenRouter |
+| 8 | Ollama local | `localhost:11434` |
+| 9 | LM Studio local | `localhost:1234` |
 
 ---
 
 ## Sources
 
-| Source | Region | Status |
-|--------|--------|--------|
-| Arbeitsagentur | 🇩🇪 | ✅ Default ON |
-| Indeed / Google Jobs | 🌍 | ✅ Default ON |
-| StepStone | 🇩🇪 | ✅ Default ON |
-| XING | 🇩🇪 | ✅ Default ON |
-| BOSS直聘 | 🇨🇳 | ⚙️ Cookie setup needed |
-| 拉勾网 | 🇨🇳 | ⚙️ CN network required |
-| 智联招聘 | 🇨🇳 | ⚙️ CN network required |
+| Source | Region | Default | Notes |
+|--------|--------|---------|-------|
+| Arbeitsagentur | 🇩🇪 | ✅ ON | Federal Employment Agency REST API |
+| Indeed / Google Jobs | 🌍 | ✅ ON | Via python-jobspy |
+| StepStone | 🇩🇪 | ✅ ON | HTML scraper |
+| XING | 🇩🇪 | ✅ ON | HTML scraper |
+| BOSS直聘 | 🇨🇳 | ⚙️ OFF | Needs `BOSSZHIPIN_COOKIES` + `pip install ".[all]"` |
+| 拉勾网 | 🇨🇳 | ⚙️ OFF | Needs mainland China network |
+| 智联招聘 | 🇨🇳 | ⚙️ OFF | Needs mainland China network |
 
 ---
 
 ## Troubleshooting
 
-**`needs_setup` response:**
-→ Call `setup({})` — it will tell you exactly what's missing.
-
-**No API key found:**
-→ `setup({"api_key": "ARK_API_KEY=your_key"})` or `jobradar init`
-
-**CV not found:**
-→ `setup({"cv_path": "/path/to/cv.pdf"})` or paste: `setup({"cv_content": "# Name\n..."})`
-
-**Pipeline is slow:**
-→ `jobradar update --mode quick --limit 3`
-
-**Port conflict:**
-→ Set `server.port` in `config.yaml`
-
-**BOSS直聘 / 拉勾 not working:**
-→ These require mainland China network access
-→ `python -m jobradar.sources.adapters.bosszhipin --capture-cookies`
+| Symptom | Fix |
+|---------|-----|
+| `needs_setup` response | Call `setup({})` — it tells you exactly what's missing |
+| No API key found | `setup({"api_key": "ARK_API_KEY=xxx"})` or `jobradar init` |
+| CV not found | `setup({"cv_path": "/path/to/cv.pdf"})` or paste via `cv_content` |
+| Pipeline is slow | `jobradar run --mode quick --limit 3` |
+| Port conflict | Set `server.port` in `config.yaml` |
+| BOSS直聘 / 拉勾 not working | CN network required; run `python -m jobradar.sources.adapters.bosszhipin --capture-cookies` |

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JobRadar Report</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;font-size:15px}
+header{background:#1a1a1a;color:#fff;padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+header h1{font-size:20px;font-weight:600;letter-spacing:-.3px}
+header .meta{font-size:13px;color:#aaa}
+.toolbar{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 32px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.toolbar input{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:220px;outline:none}
+.toolbar input:focus{border-color:#555}
+.toolbar select{padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;cursor:pointer}
+.toolbar .count{margin-left:auto;font-size:13px;color:#666}
+.summary{padding:20px 32px;display:flex;gap:16px;flex-wrap:wrap}
+.stat{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:14px 20px;min-width:120px}
+.stat .n{font-size:28px;font-weight:700;line-height:1}
+.stat .l{font-size:12px;color:#666;margin-top:4px}
+.jobs{padding:0 32px 40px;display:grid;gap:12px}
+.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:18px 20px;cursor:pointer;transition:box-shadow .15s}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.card-top{display:flex;align-items:flex-start;gap:12px}
+.score-badge{min-width:48px;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0}
+.score-hi{background:#dcfce7;color:#15803d}
+.score-mid{background:#fef9c3;color:#854d0e}
+.score-lo{background:#fee2e2;color:#b91c1c}
+.card-info{flex:1;min-width:0}
+.card-info h3{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-info .sub{font-size:13px;color:#555;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;background:#f0f0f0;color:#444}
+.tag.src{background:#e0f2fe;color:#0369a1}
+.detail{display:none;margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f0}
+.card.open .detail{display:block}
+.breakdown{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.dim{font-size:12px;background:#f8f8f8;border:1px solid #eee;border-radius:6px;padding:4px 10px}
+.dim span{font-weight:600}
+.reasoning{font-size:13px;color:#444;line-height:1.6}
+.apply-link{display:inline-block;margin-top:10px;font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:500}
+.apply-link:hover{text-decoration:underline}
+@media(max-width:600px){
+  header,.toolbar,.summary,.jobs{padding-left:16px;padding-right:16px}
+  .toolbar input{width:100%}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#x26A1; JobRadar</h1>
+  <span class="meta">Generated 2026-03-18 14:59 UTC</span>
+</header>
+<div class="toolbar">
+  <input type="text" id="q" placeholder="Search title, company, location…" oninput="filter()">
+  <select id="src" onchange="filter()"><option value="">All sources</option></select>
+  <select id="min" onchange="filter()">
+    <option value="0">All scores</option>
+    <option value="6">6+ only</option>
+    <option value="7" selected>7+ only</option>
+    <option value="8">8+ only</option>
+    <option value="9">9+ only</option>
+  </select>
+  <span class="count" id="count"></span>
+</div>
+<div class="summary" id="summary"></div>
+<div class="jobs" id="jobs"></div>
+<script>
+const JOBS = [{"id": "jobspy-indeed-3772971258", "title": "Product Owner - Knowledge Graph & Semantics (f/m/d)", "company": "SAP", "location": "Berlin, BE, DE", "score": 9.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=85cec659cef88431", "date_posted": "2026-03-16", "reasoning": "Perfect DE location fit, direct match for Hao’s Knowledge Graph/Semantic Modeling expertise, PhD research-to-production/product mindset aligns with Product Owner (PO/Product Manager-adjacent) role targeting enterprise SAP KG work.", "breakdown": {"skills_match": 10.0, "seniority_fit": 8.0, "location_fit": 10.0, "language_fit": 8.0, "visa_friendly": 8.0, "growth_potential": 9.0}}, {"id": "jobspy-indeed-740569083", "title": "Senior Developer Relations Manager - CSP", "company": "NVIDIA", "location": "Home Office, DE", "score": 7.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=0b2214b26371c0ae", "date_posted": "2026-03-17", "reasoning": "Hao has target DevRel/evangelist interest, fits DE remote location, but lacks explicit CSP/NVIDIA ecosystem depth and this is a *Senior* role Hao is still a PhD candidate graduating 2026.", "breakdown": {"skills_match": 6.0, "seniority_fit": 6.0, "location_fit": 10.0, "language_fit": 8.0, "visa_friendly": 8.0, "growth_potential": 7.0}}, {"id": "jobspy-indeed-8707561244", "title": "Principal Solution Architect", "company": "STX Next", "location": "München, BY, DE", "score": 7.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=80ce140ee9fd6142", "date_posted": "2026-03-13", "reasoning": "DE Munich remote, AI/neuro-symbolic/industrial healthcare compatible consultancy role, but *Principal* title is slightly senior for 2026 PhD grad, and details are truncated.", "breakdown": {"skills_match": 7.0, "seniority_fit": 7.0, "location_fit": 10.0, "language_fit": 8.0, "visa_friendly": 7.0, "growth_potential": 0}}, {"id": "jobspy-indeed-7019862306", "title": "Developer Relations Manager", "company": "Gladia", "location": "Berlin, BE, DE", "score": 5.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=aa07176642e59b7a", "date_posted": "2026-03-13", "reasoning": "DevRel matches target role, Berlin remote DE fits, but Gladia focuses solely on speech AI with no KG/causality/neuro-symbolic overlap; IELTS 6.5 may suffice but truncated limits clarity.", "breakdown": {"skills_match": 4.0, "seniority_fit": 6.0, "location_fit": 10.0, "language_fit": 6.0, "visa_friendly": 8.0, "growth_potential": 5.0}}, {"id": "jobspy-indeed-9937623438", "title": "Product Manager (f/m/d) | 65-85k EUR | Cologne", "company": "nan", "location": "Köln, NW, DE", "score": 4.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=2c953c29d9ad8728", "date_posted": "2026-03-16", "reasoning": "Partial manufacturing/industrial domain fit, but truncated job description limits clear technical/product alignment; Cologne remote DE matches location, seniority is plausible as PhD candidate with product mindset.", "breakdown": {"skills_match": 3.0, "seniority_fit": 5.0, "location_fit": 10.0, "language_fit": 7.0, "visa_friendly": 8.0, "growth_potential": 6.0}}, {"id": "xing-15215794", "title": "(Senior) Developer Relations Engineer (m/w/d) (DevRel Engineer)", "company": "", "location": "", "score": 3.0, "source": "xing", "url": "https://www.xing.com/jobs/koeln-senior-developer-relations-engineer-devrel-engineer-151544662", "date_posted": "", "reasoning": "Job title matches a target DevRel role, but critical details (location, description, company, visa policy) are entirely missing to assess compatibility.", "breakdown": {"skills_match": 2.0, "seniority_fit": 3.0, "location_fit": 2.0, "language_fit": 5.0, "visa_friendly": 3.0, "growth_potential": 3.0}}, {"id": "xing-63732249", "title": "Developer Relations, Hardware Platforms & AIML Optimisation Technology Evangelist (f/m/d)", "company": "", "location": "", "score": 3.0, "source": "xing", "url": "https://www.xing.com/jobs/berlin-developer-relations-hardware-platforms-aiml-optimisation-technology-evangelist-150399625", "date_posted": "", "reasoning": "Title hints at AI/ML + evangelism which fits target Developer Advocate/Evangelist, but critical details (location, description, company, visa policy) are entirely missing.", "breakdown": {"skills_match": 2.0, "seniority_fit": 4.0, "location_fit": 2.0, "language_fit": 5.0, "visa_friendly": 3.0, "growth_potential": 3.0}}, {"id": "jobspy-indeed-8470278065", "title": "TECHNICAL CUSTOMER SUCCESS MANAGER", "company": "nan", "location": "Home Office, DE", "score": 3.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=74f45d1c6124304f", "date_posted": "2026-03-18", "reasoning": "Technical CSM role may involve stakeholder communication but lacks explicit AI/KG/LLM/causality alignment, though location fits Germany. Visa sponsorship is unstated and German proficiency is low.", "breakdown": {"skills_match": 2.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 3.0, "visa_friendly": 1.0, "growth_potential": 2.0}}, {"id": "jobspy-indeed-5842422813", "title": "Mixed-Signal IC Designer – Neuromorphic Computing", "company": "Fraunhofer IIS", "location": "Erlangen, BY, DE", "score": 3.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=4972b2293b0d89e6", "date_posted": "2026-03-12", "reasoning": "No mixed-signal IC design skills; Erlangen DE fits, but role falls far outside Hao’s AI/KG/causality/product/DevRel/R&D AI targets.", "breakdown": {"skills_match": 2.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 7.0, "visa_friendly": 9.0, "growth_potential": 2.0}}, {"id": "xing-30315902", "title": "Developer Relations Manager, Retail - EMEA", "company": "", "location": "", "score": 2.0, "source": "xing", "url": "https://www.xing.com/jobs/muenchen-developer-relations-manager-retail-emea-151856311", "date_posted": "", "reasoning": "Title is a target DevRel role but no AI/KG skills, specific Germany location, manager suitability, or visa/requirements are listed, plus retail is non-preferred.", "breakdown": {"skills_match": 2.0, "seniority_fit": 1.0, "location_fit": 2.0, "language_fit": 2.0, "visa_friendly": 1.0, "growth_potential": 2.0}}, {"id": "stepstone-28870341", "title": "U2A Developer (m/w/d) im Application Management der Alliance for the Digital Euro", "company": "Deutsche Bundesbank", "location": "Frankfurt am Main", "score": 2.0, "source": "stepstone", "url": "https://www.stepstone.de/cmp/de/deutsche-bundesbank-6382/jobs", "date_posted": "", "reasoning": "No role details confirm U2A aligns with Hao’s AI/KG/LLM/causality skillset or target roles, though location fits Germany. Visa sponsorship is unstated and German proficiency is low.", "breakdown": {"skills_match": 1.0, "seniority_fit": 2.0, "location_fit": 10.0, "language_fit": 3.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "jobspy-indeed-7574413452", "title": "Engineering Manager (Tech Platform) - Munich", "company": "Impower GmbH", "location": "München, BY, DE", "score": 2.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=275afd44e1d802bf", "date_posted": "2026-03-18", "reasoning": "Property management-focused Engineering Manager role lacks any mention of AI/KG/LLM/causality, so no skill alignment. Visa sponsorship is unstated and German proficiency is low.", "breakdown": {"skills_match": 1.0, "seniority_fit": 2.0, "location_fit": 10.0, "language_fit": 3.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "jobspy-indeed-3476062787", "title": "Founding Talent Acquisition Manager", "company": "Kuro Technology", "location": "Berlin, BE, DE", "score": 2.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=eb9d89ec97ed35f9", "date_posted": "2026-03-17", "reasoning": "This is a Founding Talent Acquisition role, completely unrelated to Hao’s AI/KG/LLM, product/DevRel/research/solutions background, DE Berlin fits but no other alignment.", "breakdown": {"skills_match": 1.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 8.0, "visa_friendly": 8.0, "growth_potential": 1.0}}, {"id": "xing-47450607", "title": "Senior AI Systems Engineer (AWS) 100% Remote (m/w/d)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/frankfurt-main-senior-ai-systems-engineer-aws-100-remote-152250955", "date_posted": "", "reasoning": "No critical job details (description, location, seniority/skill/visa/language requirements, growth) are provided; additionally, the role is labeled \"Senior\", which misaligns with a 2026 PhD candidate’s experience level.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-85860273", "title": "Senior Product Manager (m/w/d)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/muenchen-senior-product-manager-152199263", "date_posted": "", "reasoning": "No critical job details (description, location, AI/PM-specific requirements, seniority, language, visa, growth) are provided, plus the role is labeled \"Senior\", which misaligns with a 2026 PhD candidate’s experience level.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-93098517", "title": "AI Product Specialist (m/w/d) – Applied AI & Microsoft Copilot", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/luebeck-ai-product-specialist-applied-ai-microsoft-copilot-152166704", "date_posted": "", "reasoning": "No critical job details (description, location, skill/visa/language requirements, growth) are provided, so no meaningful alignment can be assessed.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-29970314", "title": "Product Manager - Copilot Studio & AI Agents (m/w/d)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/ulm-product-manager-copilot-studio-ai-agents-152166381", "date_posted": "", "reasoning": "No critical job details (description, location, skill/visa/language requirements, seniority, growth) are provided, so no meaningful alignment can be assessed.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-43582077", "title": "Product Manager - AI Platform (m/f/x)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/muenchen-product-manager-ai-platform-149489454", "date_posted": "", "reasoning": "No critical job details (description, location, skill/visa/language requirements, seniority, growth) are provided, so no meaningful alignment can be assessed.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-78929491", "title": "Jobs Verzeichnis", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/directory/a", "date_posted": "", "reasoning": "No valid role, requirements, location, or skills provided; title suggests a jobs directory tool, not a position.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-8028660", "title": "Job posten", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/recruiting/jobs/create?sc_cmp=oow5eb8bc92", "date_posted": "", "reasoning": "No valid role, requirements, location, or skills provided; title translates to a job posting feature, not a position.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-38553815", "title": "Senior Full Stack Web Developer:in (w/m/d)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/bad-nauheim-senior-full-stack-web-developer-152118888", "date_posted": "", "reasoning": "Senior full stack web development is completely unrelated to Hao’s AI/KG/causality/LLM expertise and has a seniority mismatch.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "xing-31837399", "title": "Director Corporate Communication & PR (f/m/d)", "company": "", "location": "", "score": 1.0, "source": "xing", "url": "https://www.xing.com/jobs/starnberg-director-corporate-communication-pr-151959342", "date_posted": "", "reasoning": "No role details provided, and job title is unrelated to Hao’s AI/KG/DevRel/PM target roles.", "breakdown": {"skills_match": 1.0, "seniority_fit": 1.0, "location_fit": 1.0, "language_fit": 1.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "stepstone-78733640", "title": "Office of Regulatory Relations, Regulatory Compliance, Analyst, Frankfurt", "company": "Goldman Sachs AG MesseTurm", "location": "Frankfurt, Germany", "score": 1.0, "source": "stepstone", "url": "https://www.stepstone.de/cmp/de/goldman-sachs-ag-messeturm-92271/jobs", "date_posted": "", "reasoning": "Location is Frankfurt, Germany, but role is regulatory compliance analyst, which has no overlap with Hao’s AI/KG/DevRel/PM target roles or skills.", "breakdown": {"skills_match": 1.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 5.0, "visa_friendly": 3.0, "growth_potential": 1.0}}, {"id": "stepstone-13477628", "title": "DevSecOps Engineer (m/f/d) – Developer Platform", "company": "Secunet Security Networks AG", "location": "Essen", "score": 1.0, "source": "stepstone", "url": "https://www.stepstone.de/cmp/de/secunet-security-networks-ag-9874/jobs", "date_posted": "", "reasoning": "Location is Essen, Germany, but role is DevSecOps Engineer focused on developer platform security, with no overlap with Hao’s AI/KG/DevRel/PM skills or goals.", "breakdown": {"skills_match": 1.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 5.0, "visa_friendly": 3.0, "growth_potential": 1.0}}, {"id": "stepstone-43338432", "title": "iTWO-Developer / 5D-Bauprozessmanager (m/w/d)", "company": "pde Integrale Planung GmbH", "location": "Hamburg", "score": 1.0, "source": "stepstone", "url": "https://www.stepstone.de/cmp/de/pde-integrale-planung-gmbh-136495/jobs", "date_posted": "", "reasoning": "Location is Hamburg, Germany, but role is iTWO-Developer/5D construction process manager, no overlap with Hao’s AI/KG/DevRel/PM background or goals.", "breakdown": {"skills_match": 1.0, "seniority_fit": 3.0, "location_fit": 10.0, "language_fit": 4.0, "visa_friendly": 3.0, "growth_potential": 1.0}}, {"id": "stepstone-75329270", "title": "Venture Developer (m/w/d)", "company": "BFS health finance GmbH", "location": "Dortmund, Home-Office", "score": 1.0, "source": "stepstone", "url": "https://www.stepstone.de/cmp/de/bfs-health-finance-gmbh-35162/jobs", "date_posted": "", "reasoning": "No job description is provided, so no alignment with Hao’s AI/KG/LLM/causality or healthcare/pharma tech focus can be confirmed. Visa sponsorship is unstated.", "breakdown": {"skills_match": 1.0, "seniority_fit": 2.0, "location_fit": 9.0, "language_fit": 3.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "jobspy-indeed-8784546620", "title": "Assistant Manager Press Officer (all genders welcome)", "company": "Kia Europe GmbH", "location": "Frankfurt am Main, HE, DE", "score": 1.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=07c24a9eaada96e5", "date_posted": "2026-03-18", "reasoning": "Press Officer role is unrelated to Hao’s AI/KG/LLM/causality target roles or technical skillset. Visa sponsorship is unstated and German proficiency is low.", "breakdown": {"skills_match": 1.0, "seniority_fit": 2.0, "location_fit": 10.0, "language_fit": 3.0, "visa_friendly": 1.0, "growth_potential": 1.0}}, {"id": "jobspy-indeed-6231858247", "title": "React Web Developer (m/w/d)", "company": "TeleClinic GmbH", "location": "München, BY, DE", "score": 1.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=5612d58dcdd09e7a", "date_posted": "2026-03-17", "reasoning": "Pure React frontend developer role, which is explicitly Hao’s dealbreaker, DE Munich fits but no AI/KG/LLM alignment.", "breakdown": {"skills_match": 0, "seniority_fit": 5.0, "location_fit": 10.0, "language_fit": 8.0, "visa_friendly": 8.0, "growth_potential": 0}}, {"id": "jobspy-indeed-8301261675", "title": "PR Consultancy", "company": "unesco", "location": "Hamburg, HH, DE", "score": 1.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=e2205d05d7f0cb55", "date_posted": "2026-03-13", "reasoning": "No overlap with Hao’s AI/KG/causality target roles/skills; truncated UNESCO Education PR contract doesn’t align with research-to-production or tech product/DevRel/AI R&D goals.", "breakdown": {"skills_match": 1.0, "seniority_fit": 2.0, "location_fit": 10.0, "language_fit": 6.0, "visa_friendly": 8.0, "growth_potential": 1.0}}];
+const DIM_LABELS = {
+  skills_match:"Skills",seniority_fit:"Seniority",location_fit:"Location",
+  language_fit:"Language",visa_friendly:"Visa",growth_potential:"Growth"
+};
+function scoreCls(s){return s>=8?"score-hi":s>=6?"score-mid":"score-lo"}
+function buildSummary(){
+  const el=document.getElementById("summary");
+  const hi=JOBS.filter(j=>j.score>=8).length;
+  const mid=JOBS.filter(j=>j.score>=6&&j.score<8).length;
+  const srcs=new Set(JOBS.map(j=>j.source)).size;
+  el.innerHTML=[
+    ["Total",JOBS.length],["Score 8+",hi],["Score 6–8",mid],["Sources",srcs]
+  ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+function buildSourceFilter(){
+  const sel=document.getElementById("src");
+  const srcs=[...new Set(JOBS.map(j=>j.source))].sort();
+  srcs.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sel.appendChild(o);});
+}
+function renderJobs(jobs){
+  const el=document.getElementById("jobs");
+  document.getElementById("count").textContent=jobs.length+" jobs";
+  el.innerHTML=jobs.map(j=>{
+    const bd=Object.entries(j.breakdown||{})
+      .map(([k,v])=>`<div class="dim">${DIM_LABELS[k]||k}: <span>${v}</span></div>`).join("");
+    return `<div class="card" id="c_${j.id}" onclick="toggle(this)">
+      <div class="card-top">
+        <div class="score-badge ${scoreCls(j.score)}">${j.score}</div>
+        <div class="card-info">
+          <h3>${esc(j.title)}</h3>
+          <div class="sub">${esc(j.company)}${j.location?" · "+esc(j.location):""}</div>
+          <div class="tags">
+            <span class="tag src">${esc(j.source)}</span>
+            ${j.date_posted?`<span class="tag">${j.date_posted.slice(0,10)}</span>`:""}
+          </div>
+        </div>
+      </div>
+      <div class="detail">
+        ${bd?`<div class="breakdown">${bd}</div>`:""}
+        ${j.reasoning?`<div class="reasoning">${esc(j.reasoning)}</div>`:""}
+        ${j.url?`<a class="apply-link" href="${j.url}" target="_blank" rel="noopener">View job →</a>`:""}
+      </div>
+    </div>`;
+  }).join("");
+}
+function toggle(el){el.classList.toggle("open")}
+function esc(s){const d=document.createElement("div");d.textContent=s||"";return d.innerHTML}
+function filter(){
+  const q=document.getElementById("q").value.toLowerCase();
+  const src=document.getElementById("src").value;
+  const min=parseFloat(document.getElementById("min").value)||0;
+  const visible=JOBS.filter(j=>{
+    if(j.score<min)return false;
+    if(src&&j.source!==src)return false;
+    if(q&&![j.title,j.company,j.location].join(" ").toLowerCase().includes(q))return false;
+    return true;
+  });
+  renderJobs(visible);
+}
+buildSummary();buildSourceFilter();filter();
+</script>
+</body>
+</html>

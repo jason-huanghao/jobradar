@@ -104,6 +104,45 @@ def _detect_api_key() -> tuple[str | None, str | None, str | None]:
                 # Export so load_config() finds it
                 os.environ[k] = v
                 return k, base_url, model
+    # Check OpenClaw auth-profiles.json — detects OpenClaw's own stored key
+    try:
+        import json as _json
+        openclaw_profiles = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth-profiles.json"
+        if openclaw_profiles.exists():
+            profiles = _json.loads(openclaw_profiles.read_text())
+            for profile_name, profile in profiles.get("profiles", {}).items():
+                ptype = profile.get("type", "")
+                key_val = profile.get("key", "").strip()
+                if not key_val:
+                    continue
+                provider = profile.get("provider", "")
+                if provider == "volcengine" and "ark" in profile_name.lower() or provider == "volcengine":
+                    os.environ["ARK_API_KEY"] = key_val
+                    base_url, model = _PROVIDER_MAP["ARK_API_KEY"]
+                    return "ARK_API_KEY", base_url, model
+                elif provider in ("openai", "z_ai", "zai"):
+                    var = "ZAI_API_KEY" if "z" in provider else "OPENAI_API_KEY"
+                    os.environ[var] = key_val
+                    base_url, model = _PROVIDER_MAP.get(var, (None, None))
+                    if base_url:
+                        return var, base_url, model
+    except Exception:
+        pass
+
+    # Check Claude OAuth credentials (~/.claude/.credentials.json)
+    try:
+        claude_creds = Path.home() / ".claude" / ".credentials.json"
+        if claude_creds.exists():
+            import json as _json
+            creds = _json.loads(claude_creds.read_text())
+            token = creds.get("accessToken", "").strip()
+            if token:
+                os.environ["ANTHROPIC_API_KEY"] = token
+                base_url, model = _PROVIDER_MAP["ANTHROPIC_API_KEY"]
+                return "ANTHROPIC_API_KEY", base_url, model
+    except Exception:
+        pass
+
     return None, None, None
 
 

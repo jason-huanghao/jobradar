@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603101124697.png" width="140" alt="JobRadar Logo" />
+<img src="https://raw.githubusercontent.com/jason-huanghao/PicGoBed/master/imgs/202603182230148.png" width="140" alt="JobRadar Logo" />
 
 # JobRadar
 

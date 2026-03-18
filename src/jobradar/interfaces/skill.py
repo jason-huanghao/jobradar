@@ -683,6 +683,8 @@ sources:
 server:
   host: 127.0.0.1
   port: 7842
+  db_path: ./jobradar.db
+  cache_dir: ./cache
 """
 
 

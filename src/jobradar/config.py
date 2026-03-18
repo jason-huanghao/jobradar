@@ -44,7 +44,7 @@ class CandidateConfig(BaseModel):
     # Legacy alias (backward compat with existing config.yaml files)
     cv_path: str = ""
     # User-global profile cache — survives project reinstalls
-    profile_yaml: str = str(_JOBRADAR_DIR / "profile.yaml")
+    profile_yaml: str = "./memory/candidate_profile.json"
 
     def effective_cv(self) -> str:
         """Return the active CV source, preferring 'cv' over legacy 'cv_path'."""
@@ -127,15 +127,15 @@ class ReportConfig(BaseModel):
     github_pages_enabled: bool = False
     github_repo: str = ""
     report_branch: str = "gh-pages"
-    report_dir: str = str(_JOBRADAR_DIR / "reports")
+    report_dir: str = "./reports"
 
 
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 7842
     open_browser: bool = True
-    db_path: str = str(_JOBRADAR_DIR / "jobradar.db")
-    cache_dir: str = str(_JOBRADAR_DIR / "cache")
+    db_path: str = "./jobradar.db"
+    cache_dir: str = "./cache"
 
 
 class AppConfig(BaseModel):
@@ -168,10 +168,6 @@ def load_config(config_path: Path | None = None, cv_override: str | None = None)
     if env_path.exists():
         load_dotenv(env_path)
 
-    # Also load ~/.jobradar/.env if it exists (user-global keys)
-    global_env = _JOBRADAR_DIR / ".env"
-    if global_env.exists():
-        load_dotenv(global_env, override=False)
 
     raw: dict[str, Any] = {}
     if config_path.exists():
@@ -226,7 +222,10 @@ def _find_config() -> Path:
         candidate = parent / "config.yaml"
         if candidate.exists():
             return candidate
-    global_cfg = _JOBRADAR_DIR / "config.yaml"
-    if global_cfg.exists():
-        return global_cfg
+    # Check JOBRADAR_DIR env var (set by jobradar-skill wrapper)
+    env_dir = os.getenv("JOBRADAR_DIR", "").strip()
+    if env_dir:
+        env_cfg = Path(env_dir) / "config.yaml"
+        if env_cfg.exists():
+            return env_cfg
     return here / "config.yaml"

@@ -38,12 +38,16 @@
 
 ## ⚡ Null-Konfiguration mit OpenClaw — 1 Nachricht. Fertig.
 
-Einmal installieren, **nur Lebenslauf angeben** — API-Schlüssel wird automatisch erkannt.
+**Schritt 1 — Installieren** (einmal im Terminal ausführen oder OpenClaw bitten):
 
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
-cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
-openclaw gateway restart
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+Klont automatisch, erstellt Virtualenv, installiert Abhängigkeiten, startet OpenClaw-Gateway neu.
+
+**Schritt 2 — Verwenden** (zu OpenClaw oder Claude sagen):
+```
+Such Jobs in Deutschland. Mein Lebenslauf: https://github.com/…
 ```
 
 Dann sagen: *"Such Jobs in Deutschland. Mein Lebenslauf: https://github.com/…"*
@@ -101,11 +105,36 @@ Dein Lebenslauf (Markdown / PDF / DOCX / URL)
 
 ## 🚀 Schnellstart
 
+### Schnellste Installation (ein Befehl)
 ```bash
-# 1 — Klonen & installieren
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+
+### Manuelle Installation
+```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar && pip install -e .
-# CN-Quellen: pip install -e ".[cn]"
+# pip install -e ".[cn]"       # CN-Quellen
+# pip install -e ".[apply]"    # Auto-Bewerbung
+```
+
+### Lebenslauf angeben (alle Formate unterstützt)
+```bash
+# URL (GitHub, Direktlink, beliebige HTTPS-URL)
+jobradar init --cv https://github.com/du/repo/blob/main/cv.md
+
+# Lokale Datei (.md, .pdf, .docx, .txt)
+jobradar init --cv /Pfad/zu/cv.pdf
+
+# Interaktiver Wizard (inkl. Text-Einfügen-Option)
+jobradar init
+```
+
+### Erster Lauf
+```bash
+export OPENAI_API_KEY=sk-…         # oder ARK_API_KEY, DEEPSEEK_API_KEY
+jobradar health                    # Verbindung prüfen
+jobradar run --mode quick          # ~3 Min. Schnelltest pip install -e ".[cn]"
 # Auto-Bewerbung: pip install -e ".[apply]"
 
 # 2 — API-Schlüssel setzen (einer genügt)

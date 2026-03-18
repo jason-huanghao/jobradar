@@ -38,12 +38,16 @@
 
 ## ⚡ OpenClawでゼロ設定 — メッセージ1件で完了
 
-一度インストールすれば、**履歴書URLだけで動作します**。APIキーはOpenClaw環境から自動検出。
+**ステップ1 — インストール**（ターミナルで実行するか、OpenClawに依頼）:
 
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
-cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
-openclaw gateway restart
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+自動でクローン、virtualenv作成、依存関係インストール、OpenClawゲートウェイ再起動。
+
+**ステップ2 — 使用**（OpenClawまたはClaudeに言う）:
+```
+ドイツの求人を探して。私の履歴書：https://github.com/…
 ```
 
 こう言うだけ：*"ドイツの求人を探して。私の履歴書：https://github.com/…"*
@@ -100,11 +104,36 @@ openclaw gateway restart
 
 ## 🚀 クイックスタート
 
+### 最速インストール（1コマンド）
 ```bash
-# 1 — クローン & インストール
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+
+### 手動インストール
+```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar && pip install -e .
-# CN: pip install -e ".[cn]"  自動応募: pip install -e ".[apply]"
+# pip install -e ".[cn]"     # CN求人サイト
+# pip install -e ".[apply]"  # 自動応募
+```
+
+### 履歴書の提供方法（すべての形式に対応）
+```bash
+# URL（GitHub、直接リンク、任意HTTPS）
+jobradar init --cv https://github.com/あなた/リポジトリ/blob/main/cv.md
+
+# ローカルファイル（.md, .pdf, .docx, .txt）
+jobradar init --cv /path/to/cv.pdf
+
+# 対話型ウィザード（テキスト貼り付けオプションあり）
+jobradar init
+```
+
+### 初回実行
+```bash
+export OPENAI_API_KEY=sk-…         # またはARK_API_KEY等
+jobradar health                    # 接続確認
+jobradar run --mode quick          # ~3分テスト pip install -e ".[cn]"  自動応募: pip install -e ".[apply]"
 
 # 2 — APIキー設定（1つでOK）
 export OPENAI_API_KEY=sk-…

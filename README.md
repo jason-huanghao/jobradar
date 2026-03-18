@@ -38,17 +38,20 @@
 
 ## ⚡ Zero-Config with OpenClaw — 1 Message. Done.
 
-If you use [OpenClaw](https://openclaw.ai), install the skill once and **just share your CV**. API key is auto-detected from your OpenClaw profile.
+If you use [OpenClaw](https://openclaw.ai), install the skill with **one command** and just share your CV:
 
+**Step 1 — Install** (paste this into your terminal or tell OpenClaw to run it):
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
-cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
-openclaw gateway restart
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+This clones, creates a virtualenv, installs deps, and restarts the OpenClaw gateway automatically.
+
+**Step 2 — Use** (say this to OpenClaw or Claude):
+```
+Find me jobs in Germany. My CV: https://github.com/you/repo/blob/main/cv.md
 ```
 
-Then say: *"Find me jobs in Germany. My CV: https://github.com/you/repo/blob/main/cv.md"*
-
-The agent runs `setup` → scrapes 36+ jobs → scores with AI → publishes HTML report to GitHub Pages — **in one message, zero config files**.
+The agent runs `setup` → scrapes 36+ jobs → scores with AI → publishes HTML report — **in one message, zero config files**.
 
 > 📄 Live example: [report-539db1d2.html](https://jason-huanghao.github.io/jobradar/report-539db1d2.html)
 
@@ -123,36 +126,40 @@ Your CV (Markdown / PDF / DOCX / URL)
 
 **Requirements:** Python 3.11+, one LLM API key, your CV.
 
+### Fastest install (one command)
 ```bash
-# 1 — Clone & install (core, no Playwright needed for DE sources)
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+Detects your environment, clones the repo, creates a virtualenv, installs deps.
+
+### Manual install
+```bash
 git clone https://github.com/jason-huanghao/jobradar.git
-cd jobradar && pip install -e .
+cd jobradar
+pip install -e .                    # core (DE sources, no Playwright)
+# pip install -e ".[cn]"           # add CN sources (Boss直聘, Lagou, Zhilian)
+# pip install -e ".[apply]"        # add auto-apply (Boss直聘 greet + LinkedIn)
+# pip install -e ".[web]"          # add web dashboard extras
+```
 
-# For CN platforms (Boss直聘, 拉勾网, 智联招聘):
-# pip install -e ".[cn]"
+### Provide your CV (pick any format)
+```bash
+# URL (GitHub, direct link, any HTTPS)
+jobradar init --cv https://github.com/you/repo/blob/main/cv.md
 
-# For auto-apply (Boss直聘 greet + LinkedIn Easy Apply):
-# pip install -e ".[apply]"
+# Local file — Markdown, PDF, DOCX, or plain text
+jobradar init --cv /path/to/cv.pdf
+jobradar init --cv ./cv/cv_current.md
 
-# For web dashboard extras:
-# pip install -e ".[web]"
-
-# 2 — Set a key (any one works)
-export OPENAI_API_KEY=sk-…
-# export ARK_API_KEY=…              # Volcengine Ark (best for CN users)
-# export DEEPSEEK_API_KEY=…         # DeepSeek (most affordable)
-
-# 3 — Interactive setup wizard
+# Interactive wizard (includes a paste-text option)
 jobradar init
+```
 
-# Or non-interactive:
-jobradar init --cv ./cv/cv.md --api-key ARK_API_KEY=xxx --locations "Berlin,Remote" -y
-
-# 4 — Verify
-jobradar health
-
-# 5 — Run
-jobradar run --mode quick           # ~3 min, fast test
+### First run
+```bash
+export OPENAI_API_KEY=sk-…          # or ARK_API_KEY, DEEPSEEK_API_KEY, etc.
+jobradar health                     # verify LLM + CV
+jobradar run --mode quick           # ~3 min fast test
 jobradar run                        # full run (all sources)
 jobradar install-agent              # daily 08:00 automation (macOS)
 ```

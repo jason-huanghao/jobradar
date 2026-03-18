@@ -38,12 +38,16 @@
 
 ## ⚡ Zéro configuration avec OpenClaw — 1 message. C'est tout.
 
-Installe une fois, **partage juste ton CV** — la clé API est détectée automatiquement.
+**Étape 1 — Installer** (coller dans ton terminal ou demander à OpenClaw de le faire) :
 
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
-cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
-openclaw gateway restart
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+Automatiquement : clone, crée le virtualenv, installe les dépendances, redémarre le gateway OpenClaw.
+
+**Étape 2 — Utiliser** (dire à OpenClaw ou Claude) :
+```
+Trouve-moi des emplois en Allemagne. Mon CV : https://github.com/…
 ```
 
 Dis simplement : *"Trouve-moi des emplois en Allemagne. Mon CV : https://github.com/…"*
@@ -100,11 +104,36 @@ Ton CV (Markdown / PDF / DOCX / URL)
 
 ## 🚀 Démarrage rapide
 
+### Installation la plus rapide (une commande)
 ```bash
-# 1 — Cloner & installer
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+
+### Installation manuelle
+```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar && pip install -e .
-# CN: pip install -e ".[cn]"   Candidature auto: pip install -e ".[apply]"
+# pip install -e ".[cn]"     # sources CN
+# pip install -e ".[apply]"  # candidature automatique
+```
+
+### Fournir ton CV (tous les formats acceptés)
+```bash
+# URL (GitHub, lien direct, n'importe quelle URL HTTPS)
+jobradar init --cv https://github.com/toi/repo/blob/main/cv.md
+
+# Fichier local (.md, .pdf, .docx, .txt)
+jobradar init --cv /chemin/vers/cv.pdf
+
+# Assistant interactif (inclut l'option coller du texte)
+jobradar init
+```
+
+### Première exécution
+```bash
+export OPENAI_API_KEY=sk-…         # ou ARK_API_KEY, DEEPSEEK_API_KEY
+jobradar health                    # vérifier connexion
+jobradar run --mode quick          # ~3 min test rapide pip install -e ".[cn]"   Candidature auto: pip install -e ".[apply]"
 
 # 2 — Clé LLM (une seule suffit)
 export OPENAI_API_KEY=sk-…

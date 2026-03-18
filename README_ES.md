@@ -38,12 +38,16 @@
 
 ## ⚡ Cero configuración con OpenClaw — 1 mensaje. Listo.
 
-Instala una vez, **solo comparte tu CV** — la clave API se detecta automáticamente.
+**Paso 1 — Instalar** (ejecuta en tu terminal o pide a OpenClaw que lo haga):
 
 ```bash
-git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
-cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
-openclaw gateway restart
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+Automáticamente: clona, crea virtualenv, instala deps, reinicia el gateway de OpenClaw.
+
+**Paso 2 — Usar** (dile a OpenClaw o Claude):
+```
+Busca empleos en Alemania. Mi CV: https://github.com/…
 ```
 
 Di simplemente: *"Busca empleos en Alemania. Mi CV: https://github.com/…"*
@@ -100,11 +104,36 @@ Tu CV (Markdown / PDF / DOCX / URL)
 
 ## 🚀 Inicio rápido
 
+### Instalación más rápida (un comando)
 ```bash
-# 1 — Clonar e instalar
+bash <(curl -fsSL https://raw.githubusercontent.com/jason-huanghao/jobradar/main/install.sh)
+```
+
+### Instalación manual
+```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar && pip install -e .
-# CN: pip install -e ".[cn]"   Auto-apply: pip install -e ".[apply]"
+# pip install -e ".[cn]"     # fuentes CN
+# pip install -e ".[apply]"  # postulación automática
+```
+
+### Proporcionar tu CV (todos los formatos admitidos)
+```bash
+# URL (GitHub, enlace directo, cualquier HTTPS)
+jobradar init --cv https://github.com/tú/repo/blob/main/cv.md
+
+# Archivo local (.md, .pdf, .docx, .txt)
+jobradar init --cv /ruta/a/cv.pdf
+
+# Asistente interactivo (incluye opción de pegar texto)
+jobradar init
+```
+
+### Primera ejecución
+```bash
+export OPENAI_API_KEY=sk-…         # o ARK_API_KEY, DEEPSEEK_API_KEY
+jobradar health                    # verificar conexión
+jobradar run --mode quick          # ~3 min prueba rápida pip install -e ".[cn]"   Auto-apply: pip install -e ".[apply]"
 
 # 2 — Clave LLM (solo una)
 export OPENAI_API_KEY=sk-…

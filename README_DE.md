@@ -21,7 +21,7 @@
 
 ---
 
-> **JobRadar** liest deinen Lebenslauf, durchsucht parallel 7 Jobbörsen in Deutschland und China, bewertet jede Stelle mit einem LLM anhand von 6 Kriterien und liefert täglich eine Zusammenfassung, HTML-Report und maßgeschneiderte Bewerbungsschreiben — vollautomatisch.
+> **JobRadar** liest deinen Lebenslauf, durchsucht parallel **7 Jobbörsen** in Deutschland und China, bewertet jede Stelle anhand von 6 Kriterien, generiert maßgeschneiderte Anschreiben und CV-Abschnitte und kann **automatisch bewerben** — auf BOSS直聘 und LinkedIn.
 
 ---
 
@@ -38,34 +38,19 @@
 
 ## ⚡ Null-Konfiguration mit OpenClaw — 1 Nachricht. Fertig.
 
-Wenn du [OpenClaw](https://openclaw.ai) verwendest, wird JobRadar als Skill installiert und **benötigt nur deinen Lebenslauf**. Der API-Schlüssel wird automatisch aus deiner OpenClaw-Umgebung erkannt — kein manuelles Konfigurieren nötig.
+Einmal installieren, **nur Lebenslauf angeben** — API-Schlüssel wird automatisch erkannt.
 
 ```bash
-# Einmalige Skill-Installation
 git clone https://github.com/jason-huanghao/jobradar.git ~/.agents/skills/jobradar
 cd ~/.agents/skills/jobradar && python3 -m venv .venv && .venv/bin/pip install -e . -q
 openclaw gateway restart
 ```
 
-Dann einfach sagen:
+Dann sagen: *"Such Jobs in Deutschland. Mein Lebenslauf: https://github.com/…"*
 
-```
-Such mir Jobs in Deutschland. Mein Lebenslauf: https://github.com/du/repo/blob/main/cv.md
-```
-
-Der Agent ruft `setup` auf (API-Schlüssel automatisch erkannt), crawlt 36+ Stellen, bewertet sie mit KI und veröffentlicht einen HTML-Report auf GitHub Pages — **in zwei Gesprächsrunden, null Konfigurationsdateien**.
+Agent führt aus: `setup` → scrapt 36+ Stellen → AI-Scoring → veröffentlicht HTML-Report auf GitHub Pages — **in einer Nachricht, ohne Konfigurationsdateien**.
 
 > 📄 Live-Beispiel: [report-539db1d2.html](https://jason-huanghao.github.io/jobradar/report-539db1d2.html)
-
----
-
-## 📋 Navigation
-
-| [✨ Funktionen](#-funktionen) | [⚙️ So funktioniert's](#️-so-funktionierts) | [🚀 Schnellstart](#-schnellstart) |
-|:---:|:---:|:---:|
-| [🤖 Mit OpenClaw & Claude](#-mit-openclaw--claude) | [🔌 Jobquellen](#-jobquellen) | [🔌 LLM-Anbieter](#-llm-anbieter) |
-| [⚙️ Konfiguration](#️-konfiguration) | [🖥️ Befehlsreferenz](#️-befehlsreferenz) | [📊 Bewertungssystem](#-bewertungssystem) |
-| [🗺️ Roadmap](#️-roadmap) | [🤝 Mitmachen](#-mitmachen) | [⚠️ Haftungsausschluss](#️-haftungsausschluss) |
 
 ---
 
@@ -73,15 +58,16 @@ Der Agent ruft `setup` auf (API-Schlüssel automatisch erkannt), crawlt 36+ Stel
 
 | Funktion | Was du bekommst |
 |----------|----------------|
-| 🌐 **7 Quellen parallel** | Bundesagentur, Indeed, Glassdoor, Google Jobs, StepStone, BOSS直聘, 拉勾网, 智联招聘 — gleichzeitig |
+| 🌐 **7 Quellen parallel** | Bundesagentur, Indeed, Glassdoor, Google Jobs, StepStone, XING, BOSS直聘, 拉勾网, 智联招聘 |
 | 🤖 **KI-Matching** | 6-Dimensionen-Score (0–10) mit vollständiger Begründung |
-| 🔑 **Automatische API-Erkennung** | OpenClaw-Auth, Claude OAuth oder Umgebungsvariablen — kein manuelles Eingeben |
-| 🔌 **Jedes LLM, kein Lock-in** | Volcengine Ark, Z.AI, OpenAI, DeepSeek, OpenRouter, Ollama — automatisch erkannt |
-| 📊 **HTML-Report + Excel** | Farbkodierter Tracker + GitHub Pages Report mit einem Befehl |
-| 📰 **Tages-Digest** | Markdown-Zusammenfassung der besten Matches, per E-Mail oder Handy |
+| 🔑 **Automatische API-Erkennung** | OpenClaw-Auth, Claude OAuth oder Umgebungsvariablen |
+| 🔌 **Jedes LLM, kein Lock-in** | Volcengine Ark, Z.AI, OpenAI, DeepSeek, OpenRouter, Ollama |
 | ✉️ **Individuelle Anschreiben** | Firmenbezogen, LLM-generiert — keine Templates |
+| 📝 **Lebenslauf-Abschnitt-Optimierung** | Schreibt deinen Summary + Skills-Abschnitt pro Job neu |
+| 📊 **HTML-Report + Excel** | GitHub Pages Report + farbkodierter Excel-Tracker |
+| 🚀 **Auto-Bewerbung** | BOSS直聘 Playwright-Gruß + LinkedIn Easy Apply (benötigt `[apply]`) |
+| 🌐 **Web-Dashboard** | FastAPI-Oberfläche — Jobs durchsuchen, Bewerbungen generieren, Excel herunterladen |
 | ⚡ **Inkrementell** | Nur neue Stellen werden bewertet — tägliche Updates in Minuten |
-| 🧠 **Lernende Präferenzen** | `--feedback "AMD liked"` beeinflusst alle künftigen Bewertungen |
 
 ---
 
@@ -91,25 +77,24 @@ Der Agent ruft `setup` auf (API-Schlüssel automatisch erkannt), crawlt 36+ Stel
 Dein Lebenslauf (Markdown / PDF / DOCX / URL)
               │
               ▼
-┌─────────────────────────────────────────────────┐
-│ 1  ENTDECKEN  Lebenslauf parsen → Zielrollen    │
-│               Suchanfragen pro Plattform bauen  │
-├─────────────────────────────────────────────────┤
-│ 2  SUCHEN     7 Quellen in parallelen Threads   │
-│               Bundesagentur · Indeed · Glassdoor│
-│               Google Jobs · StepStone           │
-│               BOSS直聘 · 拉勾网 · 智联招聘      │
-├─────────────────────────────────────────────────┤
-│ 3  FILTERN    URL-Dedup · Praktika herausfiltern│
-├─────────────────────────────────────────────────┤
-│ 4  BEWERTEN   LLM bewertet jede Stelle (0–10)  │
-│               Skills · Seniority · Ort          │
-│               Sprache · Visum · Entwicklung     │
-├─────────────────────────────────────────────────┤
-│ 5  AUSGEBEN   📊 HTML-Report (GitHub Pages)     │
-│               📰 Tages-Digest                   │
-│               ✉️  Anschreiben · 📧 E-Mail-Alert  │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│ 1  ENTDECKEN  CV parsen → Zielrollen, Skills, Orte │
+├─────────────────────────────────────────────────────┤
+│ 2  SUCHEN     7 Quellen parallel:                   │
+│               Bundesagentur · Indeed · Glassdoor    │
+│               Google Jobs · StepStone · XING  (DE) │
+│               BOSS直聘 · 拉勾网 · 智联招聘  (CN)    │
+├─────────────────────────────────────────────────────┤
+│ 3  FILTERN    URL-Dedup · Praktika/Rauschen filtern │
+├─────────────────────────────────────────────────────┤
+│ 4  BEWERTEN   LLM: 6 Dimensionen (0–10) pro Stelle │
+├─────────────────────────────────────────────────────┤
+│ 5  GENERIEREN ✉️  Anschreiben pro Top-Match         │
+│               📝 CV-Abschnitt pro Top-Match         │
+├─────────────────────────────────────────────────────┤
+│ 6  AUSGEBEN   📊 HTML-Report · 📁 Excel             │
+│               🌐 Web-Dashboard · 🚀 Auto-Bewerbung  │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -120,62 +105,50 @@ Dein Lebenslauf (Markdown / PDF / DOCX / URL)
 # 1 — Klonen & installieren
 git clone https://github.com/jason-huanghao/jobradar.git
 cd jobradar && pip install -e .
+# CN-Quellen: pip install -e ".[cn]"
+# Auto-Bewerbung: pip install -e ".[apply]"
 
-# 2 — LLM-Schlüssel setzen (einer genügt)
+# 2 — API-Schlüssel setzen (einer genügt)
 export OPENAI_API_KEY=sk-…
-# export DEEPSEEK_API_KEY=…         # günstigste Option
-# export ARK_API_KEY=…              # Volcengine Ark
+# export ARK_API_KEY=…   export DEEPSEEK_API_KEY=…
 
-# 3 — Einrichten (schreibt config.yaml automatisch)
-jobradar --init --cv ./cv/cv_current.md --locations "Berlin,Hamburg,Remote"
+# 3 — Setup-Wizard
+jobradar init
+# Oder nicht-interaktiv:
+jobradar init --cv ./cv/cv.md --api-key ARK_API_KEY=xxx --locations "Berlin,Remote" -y
 
 # 4 — Verbindung prüfen
-jobradar --health
+jobradar health
 
-# 5 — Erster Lauf
-jobradar --mode quick               # ~3 Min., 2 Quellen — zum Testen
-jobradar --update                   # Vollständiger inkrementeller Lauf
-jobradar --install-agent            # Täglich um 8 Uhr automatisieren
+# 5 — Ersten Lauf starten
+jobradar run --mode quick           # ~3 Min., Schnelltest
+jobradar run                        # Vollständiger Lauf
+jobradar install-agent              # Täglich 08:00 (macOS launchd)
 ```
-
----
-
-## 🤖 Mit OpenClaw & Claude
-
-**API-Schlüssel wird automatisch erkannt** — der Agent braucht nur deine Lebenslauf-URL.
-
-| Du sagst | Was ausgeführt wird |
-|----------|---------------------|
-| „Such Jobs in DE. Mein CV: https://…" | `setup` + `run_pipeline` + `list_jobs` |
-| „Ist JobRadar bereit?" | `--health --json` |
-| „Zeig mir die besten Jobs heute" | `--show-digest --json` |
-| „Anschreiben für SAP erstellen" | `--generate-app "SAP"` |
-| „Ich habe mich bei Zalando beworben" | `--mark-applied "Zalando"` |
-| „Warum hat Databricks niedrig gescort?" | `--explain "Databricks"` |
-| „Report veröffentlichen" | `get_report --publish` → GitHub Pages URL |
-| „Tägliche Automation einrichten" | `--install-agent` |
 
 ---
 
 ## 🔌 Jobquellen
 
-| Quelle | Status | Authentifizierung |
-|--------|--------|-------------------|
-| Bundesagentur für Arbeit | ✅ Aktiv | Keine |
-| Indeed DE | ✅ Aktiv | Keine |
-| Glassdoor DE | ✅ Aktiv | Keine |
-| Google Jobs | ✅ Aktiv | Keine |
-| StepStone | 🔧 In Entwicklung | — |
-| XING | 🔧 In Entwicklung | Apify Token |
-| BOSS直聘 (CN) | ✅ Aktiv | Browser-Cookie + CN IP |
-| 拉勾网 (CN) | ✅ Aktiv | Session-Cookie (auto) |
-| 智联招聘 (CN) | ✅ Aktiv | Kein Login nötig |
+Alle DE-Quellen sind **vollständig implementiert** — kein Playwright oder Login nötig:
+
+| Quelle | Auth | Hinweis |
+|--------|------|---------|
+| Bundesagentur für Arbeit | keine | Offizielle DE-API |
+| Indeed DE | keine | via python-jobspy |
+| Glassdoor DE | keine | via python-jobspy |
+| Google Jobs | keine | via python-jobspy |
+| StepStone | keine | httpx + BeautifulSoup-Scraper |
+| XING | keine | httpx + BeautifulSoup-Scraper |
+| BOSS直聘 (CN) | Cookie | `BOSSZHIPIN_COOKIES` — `[cn]`-Extra erforderlich |
+| 拉勾网 (CN) | keine | Mobile-API → AJAX → Playwright |
+| 智联招聘 (CN) | keine | REST-API → Playwright |
 
 ---
 
 ## 🔌 LLM-Anbieter
 
-Wird automatisch in dieser Reihenfolge erkannt:
+Automatisch in dieser Prioritätsreihenfolge erkannt:
 
 | Priorität | Quelle | Umgebungsvariable |
 |-----------|--------|-------------------|
@@ -186,42 +159,21 @@ Wird automatisch in dieser Reihenfolge erkannt:
 | 4 | OpenAI | `OPENAI_API_KEY` |
 | 5 | DeepSeek | `DEEPSEEK_API_KEY` |
 | 6 | OpenRouter | `OPENROUTER_API_KEY` |
-| 7 | Ollama | *(lokal)* |
-
----
-
-## ⚙️ Konfiguration
-
-```yaml
-candidate:
-  cv: "./cv/cv_current.md"
-search:
-  locations: ["Berlin", "Hamburg", "Remote"]
-  exclude_keywords: ["Praktikum", "Werkstudent", "Ausbildung"]
-  exclude_companies: ["MeinAlterArbeitgeber"]
-scoring:
-  min_score_digest: 6
-  min_score_application: 7
-server:
-  db_path: ./jobradar.db
-```
+| 7 | Ollama / LM Studio | *(lokal)* |
 
 ---
 
 ## 🖥️ Befehlsreferenz
 
 ```bash
-jobradar --init [--cv …] [--locations …] [--llm …] [--key …]
-jobradar --health [--json]          # Verbindungscheck
-jobradar --status [--json]          # Pool-Statistiken
-jobradar --update                   # Täglicher Lauf (nur neue Stellen)
-jobradar --mode quick               # Schnelltest (~3 Min.)
-jobradar --show-digest [--json]     # Heutigen Digest anzeigen
-jobradar --generate-app "Firma"     # Anschreiben erstellen
-jobradar --mark-applied "Firma"     # Als beworben markieren
-jobradar --explain "Firma"          # Score-Analyse anzeigen
-jobradar --feedback "AMD liked"     # Präferenz speichern
-jobradar --install-agent            # Tägliche Automation
+jobradar init [--cv …] [--api-key ENV=val] [-y]  # Setup-Wizard
+jobradar health / status                          # Checks
+jobradar run [--mode quick|dry-run|score-only]    # Pipeline
+jobradar run --limit 5                            # Ergebnisse begrenzen
+jobradar report [--publish] [--min-score 7]       # HTML-Report
+jobradar apply [--dry-run] [--auto] [--min-score 8]  # Auto-Bewerbung
+jobradar web [--port 8080]                        # Web-Dashboard
+jobradar install-agent                            # Tägliche Automation
 ```
 
 ---
@@ -237,34 +189,39 @@ jobradar --install-agent            # Tägliche Automation
 | **Visumsfreundlich** | Wahrscheinlichkeit einer Arbeitserlaubnis |
 | **Wachstumspotenzial** | Karrierepfad, Unternehmenstrajektorie |
 
+Score ≥ `min_score_application` → Anschreiben + optimierter CV-Abschnitt automatisch generiert.
+
+---
+
+## 🤖 Auto-Bewerbung
+
+Benötigt: `pip install -e ".[apply]" && playwright install chromium`
+
+**BOSS直聘:** Öffnet Stellenseite, prüft HR-Aktivität (> 7 Tage inaktiv → überspringen), klickt 立即沟通, sendet anpassbare Begrüßungsnachricht. Zufällige Verzögerung 3–8 s, max. 50/Tag.
+
+**LinkedIn Easy Apply:** Klickt Easy Apply, reicht einstufige Bewerbungen ein (mehrstufige übersprungen). Zufällige Verzögerung 4–10 s, max. 25/Tag.
+
+```bash
+jobradar apply --dry-run            # Zuerst Vorschau
+jobradar apply --auto --min-score 8 # Dann live bewerben
+```
+
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Paralleles Crawling · `--health` / `--status` / `--json`
-- [x] `--init` nicht-interaktives Setup
-- [x] OpenClaw Null-Konfiguration (API-Schlüssel automatisch erkannt)
-- [x] HTML-Report + GitHub Pages Publisher
-- [x] Alle Pfade relativ (kein `~/.jobradar`)
-- [ ] StepStone vollständige Implementierung
-- [ ] XING / LinkedIn nativer Adapter
-- [ ] Docker-Einzeiler · OpenClaw Cron-Integration
-
----
-
-## 🤝 Mitmachen
-
-```bash
-git clone https://github.com/jason-huanghao/jobradar.git
-pip install -e ".[dev]"
-ruff check src/ && pytest tests/ -v
-```
+- [x] 7 parallele Quellen · AI-Scoring (6D) · Anschreiben + CV-Optimierung
+- [x] StepStone & XING — vollständige Scraper
+- [x] BOSS直聘 Auto-Bewerbung + LinkedIn Easy Apply
+- [x] HTML-Report + GitHub Pages · Excel-Export · Web-Dashboard
+- [x] OpenClaw Null-Konfiguration
+- [ ] 前程无忧 (51job) · Telegram/E-Mail-Digest · Docker · MCP-Server
 
 ---
 
 ## ⚠️ Haftungsausschluss
 
-Ausschließlich für **persönliche Jobsuche, technisches Lernen und akademische Forschung**. Nutzer müssen die `robots.txt` und Nutzungsbedingungen jeder Plattform einhalten.
+Ausschließlich für **persönliche Jobsuche, Lernen und Forschung**. `robots.txt` und Nutzungsbedingungen jeder Plattform einhalten.
 
 ---
 

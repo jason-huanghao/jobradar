@@ -17,6 +17,12 @@ BOSS直聘, 拉勾, 智联 → scores against your CV → generates cover letter
 
 > **Use `jobradar-skill` to call all tools. Never use `run_skill` Python imports directly.**
 
+> ⚠️ **CRITICAL — read before using any tool:**
+> - `run_pipeline` runs **SYNCHRONOUSLY** and takes **3–10 minutes**.
+>   Do **NOT** background it, do **NOT** poll, do **NOT** proceed until it returns a result.
+> - **ALWAYS** invoke via full path: `~/.agents/skills/jobradar/jobradar-skill`
+> - **NEVER** use `~/.jobradar` path — that path does not exist. Ignore it entirely.
+
 ### Exact commands to run
 
 ```bash

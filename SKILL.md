@@ -15,56 +15,40 @@ BOSS直聘, 拉勾, 智联 → scores against your CV → generates cover letter
 
 ## 🤖 Agent Instructions (for OpenClaw / AI assistants)
 
-> **Goal: configure JobRadar in ≤2 user messages.**
+> **Use `jobradar-skill` to call all tools. Never use `run_skill` Python imports directly.**
 
-### Minimal-turn setup flow
+### Exact commands to run
 
+```bash
+# Step 1 — Check/configure (always run first)
+jobradar-skill setup
+# → if configured=true, go to Step 3
+# → if missing=["cv"], ask user for CV path/URL, then:
+jobradar-skill setup '{"cv_path": "<url_or_path>"}'
+
+# Step 2 — Run job search
+jobradar-skill run_pipeline '{"mode": "quick"}'
+
+# Step 3 — Show results
+jobradar-skill list_jobs '{"min_score": 7, "limit": 10}'
+jobradar-skill get_digest '{"min_score": 7}'
+
+# Step 4 — Generate report
+jobradar-skill get_report '{"min_score": 0}'
+# Ask user: "Would you like me to publish this to GitHub Pages?"
+# If yes: jobradar-skill get_report '{"publish": true}'
+
+# Step 5 — Auto-apply (dry run first, always)
+jobradar-skill apply_jobs '{"dry_run": true, "min_score": 7.5}'
+# If user confirms: jobradar-skill apply_jobs '{"dry_run": false, "min_score": 7.5}'
 ```
-Step 1: call setup({})
-        → auto-detects API key from environment
-        → returns: detected config + prompt_for_user string
-        → show prompt_for_user to user verbatim (one message only)
 
-Step 2: if configured=True → skip to Step 4
-        if missing=["cv"] → user provides CV (path / URL / paste text)
-        if missing=["api_key"] → user provides key
-        if both missing → ask for both in one message
-
-Step 3: call setup({...with what user provided...})
-        → repeat until configured=True
-
-Step 4: call run_pipeline({"mode": "quick"})
-        → show top matches to user
-```
-
-### Key behaviours
-
-- **Auto-detects LLM keys first** — checks Claude OAuth, OPENCLAW_API_KEY, ARK_API_KEY,
-  ZAI_API_KEY, OPENAI_API_KEY etc. **Never ask for a key before calling setup({}).**
-- **CV accepts anything** — local path (.md/.pdf/.docx/.txt), GitHub URL, or pasted text.
-  GitHub blob URLs are auto-converted to raw format.
-- **Default locations** — worldwide (empty = no filter). Narrow only if user requests cities.
-- **prompt_for_user field** — always show this verbatim; it contains the right question.
-
-### Ideal interaction (3 user messages total)
-
-```
-User:   set up JobRadar
-
-Agent:  setup({})
-        → "API key found (OPENCLAW_API_KEY). Just need your CV.
-           Path, URL, or paste your CV text?"
-
-User:   https://github.com/jason-huanghao/daily-rss-digest/blob/main/cv_current.md
-
-Agent:  setup({"cv_path": "https://github.com/.../cv_current.md"})
-        → "✅ Ready! Run a quick job search now?"
-
-User:   yes
-
-Agent:  run_pipeline({"mode": "quick"})
-        → shows top matches
-```
+### Key rules
+- **`jobradar-skill` is in `~/.agents/skills/jobradar/jobradar-skill`** — it is on PATH if the skill dir is in PATH, otherwise use the full path
+- Always call `setup` first in a new session to auto-detect API keys
+- `get_report` stores the report locally by default; only publish when user explicitly agrees
+- `apply_jobs` defaults to `dry_run: true` — never set `dry_run: false` without user confirmation
+- CV accepts: file path, GitHub URL (blob URLs auto-converted), or paste via `cv_content`
 
 ---
 

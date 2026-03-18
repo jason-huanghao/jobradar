@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# jobradar-skill — OpenClaw agent entry point for JobRadar
+# Usage: jobradar-skill [tool_name] [json_params]
+# Examples:
+#   jobradar-skill setup
+#   jobradar-skill setup '{"cv_path":"https://github.com/.../cv.md"}'
+#   jobradar-skill run_pipeline '{"mode":"quick"}'
+#   jobradar-skill list_jobs '{"min_score":7}'
+#   jobradar-skill get_report '{"publish":false}'
+#   jobradar-skill apply_jobs '{"dry_run":true}'
+#   jobradar-skill get_digest
+#   jobradar-skill get_status
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PY="${SKILL_DIR}/.venv/bin/python"
+
+# Bootstrap venv on first run
+if [ ! -f "$VENV_PY" ]; then
+  echo "First run: setting up virtualenv (takes ~30s)..." >&2
+  python3 -m venv "${SKILL_DIR}/.venv" >&2
+  "${SKILL_DIR}/.venv/bin/pip" install -e "${SKILL_DIR}" -q >&2
+fi
+
+# Pass tool and params via env vars to avoid all shell quoting issues
+TOOL="${1:-get_status}"
+PARAMS="${2}"
+[ -z "$PARAMS" ] && PARAMS="{}"
+export JOBRADAR_SKILL_TOOL="$TOOL"
+export JOBRADAR_SKILL_PARAMS="$PARAMS"
+export JOBRADAR_DIR="$SKILL_DIR"
+export PYTHONPATH="${SKILL_DIR}/src:${PYTHONPATH}"
+
+"$VENV_PY" -c "
+import os, sys
+sys.path.insert(0, os.path.join(os.environ['JOBRADAR_DIR'], 'src'))
+from jobradar.interfaces.skill import run_skill
+print(run_skill(os.environ['JOBRADAR_SKILL_TOOL'], os.environ['JOBRADAR_SKILL_PARAMS']))
+"

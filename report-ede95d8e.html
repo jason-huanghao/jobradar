@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JobRadar Report</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;font-size:15px}
+header{background:#1a1a1a;color:#fff;padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+header h1{font-size:20px;font-weight:600;letter-spacing:-.3px}
+header .meta{font-size:13px;color:#aaa}
+.toolbar{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 32px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.toolbar input{padding:7px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:220px;outline:none}
+.toolbar input:focus{border-color:#555}
+.toolbar select{padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;cursor:pointer}
+.toolbar .count{margin-left:auto;font-size:13px;color:#666}
+.summary{padding:20px 32px;display:flex;gap:16px;flex-wrap:wrap}
+.stat{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:14px 20px;min-width:120px}
+.stat .n{font-size:28px;font-weight:700;line-height:1}
+.stat .l{font-size:12px;color:#666;margin-top:4px}
+.jobs{padding:0 32px 40px;display:grid;gap:12px}
+.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:18px 20px;cursor:pointer;transition:box-shadow .15s}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.card-top{display:flex;align-items:flex-start;gap:12px}
+.score-badge{min-width:48px;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0}
+.score-hi{background:#dcfce7;color:#15803d}
+.score-mid{background:#fef9c3;color:#854d0e}
+.score-lo{background:#fee2e2;color:#b91c1c}
+.card-info{flex:1;min-width:0}
+.card-info h3{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-info .sub{font-size:13px;color:#555;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;background:#f0f0f0;color:#444}
+.tag.src{background:#e0f2fe;color:#0369a1}
+.detail{display:none;margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f0}
+.card.open .detail{display:block}
+.breakdown{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.dim{font-size:12px;background:#f8f8f8;border:1px solid #eee;border-radius:6px;padding:4px 10px}
+.dim span{font-weight:600}
+.reasoning{font-size:13px;color:#444;line-height:1.6}
+.apply-link{display:inline-block;margin-top:10px;font-size:13px;color:#1d4ed8;text-decoration:none;font-weight:500}
+.apply-link:hover{text-decoration:underline}
+@media(max-width:600px){
+  header,.toolbar,.summary,.jobs{padding-left:16px;padding-right:16px}
+  .toolbar input{width:100%}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#x26A1; JobRadar</h1>
+  <span class="meta">Generated 2026-03-18 14:09 UTC</span>
+</header>
+<div class="toolbar">
+  <input type="text" id="q" placeholder="Search title, company, location…" oninput="filter()">
+  <select id="src" onchange="filter()"><option value="">All sources</option></select>
+  <select id="min" onchange="filter()">
+    <option value="0">All scores</option>
+    <option value="6">6+ only</option>
+    <option value="7" selected>7+ only</option>
+    <option value="8">8+ only</option>
+    <option value="9">9+ only</option>
+  </select>
+  <span class="count" id="count"></span>
+</div>
+<div class="summary" id="summary"></div>
+<div class="jobs" id="jobs"></div>
+<script>
+const JOBS = [{"id": "xing-7262974", "title": "Developer Relations, Hardware Platforms & AIML Optimisation Technology Evangelist (f/m/d)", "company": "", "location": "", "score": 9.0, "source": "xing", "url": "https://www.xing.com/jobs/berlin-developer-relations-hardware-platforms-aiml-optimisation-technology-evangelist-150399625", "date_posted": "", "reasoning": "Role explicitly ties DevRel/Evangelism to hardware platforms and AIML optimisation, matching candidate’s full-stack, neuro-symbolic/LLM/edge deployment interest.", "breakdown": {"skills_match": 9.0, "seniority_fit": 7.0, "location_fit": 5.0, "language_fit": 8.0, "visa_friendly": 10.0, "growth_potential": 10.0}}, {"id": "xing-25462898", "title": "(Senior) Developer Relations Engineer (m/w/d) (DevRel Engineer)", "company": "", "location": "", "score": 8.0, "source": "xing", "url": "https://www.xing.com/jobs/koeln-senior-developer-relations-engineer-devrel-engineer-151544662", "date_posted": "", "reasoning": "DevRel Engineer fits target roles perfectly, no explicit mismatches noted; candidate’s PhD, AI full-stack, and publication background are strong assets.", "breakdown": {"skills_match": 8.0, "seniority_fit": 7.0, "location_fit": 5.0, "language_fit": 8.0, "visa_friendly": 10.0, "growth_potential": 9.0}}, {"id": "jobspy-indeed-9465338401", "title": "Senior Developer Relations Manager - CSP", "company": "NVIDIA", "location": "Home Office, DE", "score": 8.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=0b2214b26371c0ae", "date_posted": "2026-03-17", "reasoning": "NVIDIA’s Senior DevRel Manager aligns with Hao’s target DevRel/AI Evangelist role, technical AI/LLM/emerging tech focus, and remote DE setup; Hao’s recent PhD graduation makes seniority a minor stretch.", "breakdown": {"skills_match": 9.0, "seniority_fit": 7.0, "location_fit": 10.0, "language_fit": 7.0, "visa_friendly": 10.0, "growth_potential": 9.0}}, {"id": "jobspy-indeed-5233383135", "title": "Product Owner - Knowledge Graph & Semantics (f/m/d)", "company": "SAP", "location": "Berlin, BE, DE", "score": 7.0, "source": "jobspy:indeed", "url": "https://de.indeed.com/viewjob?jk=85cec659cef88431", "date_posted": "2026-03-16", "reasoning": "Hao's PhD focus on knowledge graphs/semantics, product-oriented systems thinking, and target AI product roles align well; part-time/full-time flexibility matches availability window but job truncates key details.", "breakdown": {"skills_match": 8.0, "seniority_fit": 7.0, "location_fit": 8.0, "language_fit": 8.0, "visa_friendly": 10.0, "growth_potential": 9.0}}];
+const DIM_LABELS = {
+  skills_match:"Skills",seniority_fit:"Seniority",location_fit:"Location",
+  language_fit:"Language",visa_friendly:"Visa",growth_potential:"Growth"
+};
+function scoreCls(s){return s>=8?"score-hi":s>=6?"score-mid":"score-lo"}
+function buildSummary(){
+  const el=document.getElementById("summary");
+  const hi=JOBS.filter(j=>j.score>=8).length;
+  const mid=JOBS.filter(j=>j.score>=6&&j.score<8).length;
+  const srcs=new Set(JOBS.map(j=>j.source)).size;
+  el.innerHTML=[
+    ["Total",JOBS.length],["Score 8+",hi],["Score 6–8",mid],["Sources",srcs]
+  ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+function buildSourceFilter(){
+  const sel=document.getElementById("src");
+  const srcs=[...new Set(JOBS.map(j=>j.source))].sort();
+  srcs.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sel.appendChild(o);});
+}
+function renderJobs(jobs){
+  const el=document.getElementById("jobs");
+  document.getElementById("count").textContent=jobs.length+" jobs";
+  el.innerHTML=jobs.map(j=>{
+    const bd=Object.entries(j.breakdown||{})
+      .map(([k,v])=>`<div class="dim">${DIM_LABELS[k]||k}: <span>${v}</span></div>`).join("");
+    return `<div class="card" id="c_${j.id}" onclick="toggle(this)">
+      <div class="card-top">
+        <div class="score-badge ${scoreCls(j.score)}">${j.score}</div>
+        <div class="card-info">
+          <h3>${esc(j.title)}</h3>
+          <div class="sub">${esc(j.company)}${j.location?" · "+esc(j.location):""}</div>
+          <div class="tags">
+            <span class="tag src">${esc(j.source)}</span>
+            ${j.date_posted?`<span class="tag">${j.date_posted.slice(0,10)}</span>`:""}
+          </div>
+        </div>
+      </div>
+      <div class="detail">
+        ${bd?`<div class="breakdown">${bd}</div>`:""}
+        ${j.reasoning?`<div class="reasoning">${esc(j.reasoning)}</div>`:""}
+        ${j.url?`<a class="apply-link" href="${j.url}" target="_blank" rel="noopener">View job →</a>`:""}
+      </div>
+    </div>`;
+  }).join("");
+}
+function toggle(el){el.classList.toggle("open")}
+function esc(s){const d=document.createElement("div");d.textContent=s||"";return d.innerHTML}
+function filter(){
+  const q=document.getElementById("q").value.toLowerCase();
+  const src=document.getElementById("src").value;
+  const min=parseFloat(document.getElementById("min").value)||0;
+  const visible=JOBS.filter(j=>{
+    if(j.score<min)return false;
+    if(src&&j.source!==src)return false;
+    if(q&&![j.title,j.company,j.location].join(" ").toLowerCase().includes(q))return false;
+    return true;
+  });
+  renderJobs(visible);
+}
+buildSummary();buildSourceFilter();filter();
+</script>
+</body>
+</html>

@@ -73,11 +73,6 @@ def _find_project_dir() -> Path | None:
             if "openclaw-jobradar" in (parent / "pyproject.toml").read_text():
                 return parent.resolve()
 
-    # 3. Default install location ~/.jobradar
-    default = Path.home() / ".jobradar"
-    if default.exists():
-        return default.resolve()
-
     return None
 
 
@@ -94,7 +89,7 @@ def _detect_api_key() -> tuple[str | None, str | None, str | None]:
                 return var, base_url, model
 
     # Check .env files
-    for search_dir in [Path.cwd(), Path.home() / ".jobradar"]:
+    for search_dir in [Path.cwd(), Path(os.environ.get("JOBRADAR_DIR", Path.cwd()))]:
         env_file = search_dir / ".env"
         if not env_file.exists():
             continue
@@ -188,7 +183,12 @@ def _handle_setup(params: dict) -> str:
     """
     project_dir = _find_project_dir()
     if project_dir is None:
-        project_dir = Path.home() / ".jobradar"
+        # Use agents skills dir if available, else create in ~/.openclaw/skills
+        candidates = [
+            Path.home() / ".agents" / "skills" / "jobradar",
+            Path.home() / ".openclaw" / "skills" / "jobradar",
+        ]
+        project_dir = next((p for p in candidates if p.exists()), candidates[0])
         project_dir.mkdir(parents=True, exist_ok=True)
 
     check_only = params.get("check_only", False)

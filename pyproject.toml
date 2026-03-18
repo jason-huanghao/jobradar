@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openclaw-jobradar"
-version = "0.3.2"
+version = "0.3.3"
 description = "AI-powered job search agent — scrape, score, apply. OpenClaw skill."
 readme = "README.md"
 requires-python = ">=3.11"

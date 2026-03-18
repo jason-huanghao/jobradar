@@ -1,7 +1,7 @@
 ---
 name: jobradar
 description: AI-powered job search agent — scrapes Arbeitsagentur, StepStone, XING, Indeed, Google Jobs, BOSS直聘, 拉勾, 智联 → scores jobs against your CV → generates cover letters for top matches. Use when a user wants to find jobs, search for positions, score job listings against their CV, generate cover letters, or auto-apply to positions.
-version: 0.3.2
+version: 0.3.3
 author: jason-huanghao
 entry_point: jobradar.interfaces.skill:run_skill
 ---

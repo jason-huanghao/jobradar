@@ -556,7 +556,12 @@ class JobRadarSkill:
             jobs = jobs_from_db(db_path, min_score=min_score)
             if not jobs:
                 return _json.dumps({"error": "No scored jobs found. Run the pipeline first."})
-            report_path = generate_report(jobs)
+            report_dir = cfg.resolve_path(cfg.report.report_dir)
+            report_dir.mkdir(parents=True, exist_ok=True)
+            import hashlib as _hashlib
+            h = _hashlib.sha256(f"{min_score}{len(jobs)}".encode()).hexdigest()[:8]
+            output_path = report_dir / f"report-{h}.html"
+            report_path = generate_report(jobs, output_path=output_path)
             result = {"report_path": str(report_path), "job_count": len(jobs)}
             if p.get("publish", False):
                 from ..report.publisher import publish_to_github_pages

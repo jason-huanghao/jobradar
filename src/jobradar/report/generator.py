@@ -7,6 +7,7 @@ No server required — the output file opens directly in any browser.
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +37,7 @@ def generate_report(
         generated_at = datetime.utcnow()
 
     if output_path is None:
-        report_dir = Path.home() / ".jobradar" / "reports"
+        report_dir = Path(os.environ.get("JOBRADAR_DIR", Path.home() / ".jobradar")) / "reports"
         report_dir.mkdir(parents=True, exist_ok=True)
         h = hashlib.sha256(f"{profile_name}{generated_at.date()}".encode()).hexdigest()[:8]
         output_path = report_dir / f"report-{h}.html"

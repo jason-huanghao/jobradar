@@ -14,6 +14,14 @@
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PY="${SKILL_DIR}/.venv/bin/python"
 
+# Load .env if present (so ARK_API_KEY etc. are available without manual export)
+if [ -f "${SKILL_DIR}/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${SKILL_DIR}/.env"
+  set +a
+fi
+
 # Bootstrap venv on first run
 if [ ! -f "$VENV_PY" ]; then
   echo "First run: setting up virtualenv (takes ~30s)..." >&2

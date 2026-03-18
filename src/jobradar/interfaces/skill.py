@@ -612,10 +612,14 @@ class JobRadarSkill:
 
 # ── Main entry point ───────────────────────────────────────────────
 
-def run_skill(tool_name: str, params_json: str = "{}") -> str:
+def run_skill(tool_name: str, params_json: str | dict = "{}") -> str:
     """Entry point called by OpenClaw. Always returns valid JSON, never raises."""
     try:
-        params = json.loads(params_json) if params_json else {}
+        # Accept both str and dict for params (agents sometimes pass dicts directly)
+        if isinstance(params_json, dict):
+            params = params_json
+        else:
+            params = json.loads(params_json) if params_json else {}
 
         # 'setup' tool is handled without requiring a running server or full config
         if tool_name == "setup":

@@ -13,7 +13,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(name="jobradar", help="AI-powered job search agent", add_completion=False)
+app = typer.Typer(name="jobradar", help="AI-powered job search agent", add_completion=False,
+                  context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 console = Console()
 
 # ── Supported LLM providers for init wizard ────────────────────────

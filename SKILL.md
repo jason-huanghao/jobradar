@@ -20,35 +20,38 @@ BOSS直聘, 拉勾, 智联 → scores against your CV → generates cover letter
 ### Exact commands to run
 
 ```bash
-# Step 1 — Check/configure (always run first)
-jobradar-skill setup
-# → if configured=true, go to Step 3
-# → if missing=["cv"], ask user for CV path/URL, then:
-jobradar-skill setup '{"cv_path": "<url_or_path>"}'
+# IMPORTANT: Use full absolute path to jobradar-skill
+JSKILL=~/.agents/skills/jobradar/jobradar-skill
 
-# Step 2 — Run job search
-jobradar-skill run_pipeline '{"mode": "quick"}'
+# Step 1 — Always run setup first (auto-detects API key)
+$JSKILL setup
 
-# Step 3 — Show results
-jobradar-skill list_jobs '{"min_score": 7, "limit": 10}'
-jobradar-skill get_digest '{"min_score": 7}'
+# Step 2 — Configure CV (if missing from Step 1)
+$JSKILL setup '{"cv_path":"https://github.com/jason-huanghao/daily-rss-digest/blob/main/cv_current.md"}'
 
-# Step 4 — Generate report
-jobradar-skill get_report '{"min_score": 0}'
-# Ask user: "Would you like me to publish this to GitHub Pages?"
-# If yes: jobradar-skill get_report '{"publish": true}'
+# Step 3 — Run job search
+$JSKILL run_pipeline '{"mode":"quick"}'
 
-# Step 5 — Auto-apply (dry run first, always)
-jobradar-skill apply_jobs '{"dry_run": true, "min_score": 7.5}'
-# If user confirms: jobradar-skill apply_jobs '{"dry_run": false, "min_score": 7.5}'
+# Step 4 — Show top results
+$JSKILL list_jobs '{"min_score":7,"limit":10}'
+$JSKILL get_digest '{"min_score":7}'
+
+# Step 5 — Generate HTML report (ask user before publishing)
+$JSKILL get_report
+# To publish: $JSKILL get_report '{"publish":true}'
+
+# Step 6 — Auto-apply (dry run first, ALWAYS confirm with user before live)
+$JSKILL apply_jobs '{"dry_run":true,"min_score":7.5}'
+# Live apply only after user confirmation:
+# $JSKILL apply_jobs '{"dry_run":false,"min_score":7.5}'
 ```
 
 ### Key rules
-- **`jobradar-skill` is in `~/.agents/skills/jobradar/jobradar-skill`** — it is on PATH if the skill dir is in PATH, otherwise use the full path
-- Always call `setup` first in a new session to auto-detect API keys
-- `get_report` stores the report locally by default; only publish when user explicitly agrees
-- `apply_jobs` defaults to `dry_run: true` — never set `dry_run: false` without user confirmation
-- CV accepts: file path, GitHub URL (blob URLs auto-converted), or paste via `cv_content`
+- **Always use `~/.agents/skills/jobradar/jobradar-skill`** — never use `jobradar-skill` without the full path
+- Call `setup` first — it auto-detects API keys (OPENCLAW_API_KEY, ARK_API_KEY, etc.)
+- `get_report` saves locally by default; only add `"publish":true` when user explicitly agrees
+- `apply_jobs` defaults to `dry_run: true` — never set `false` without explicit user confirmation
+- CV accepts: file path, GitHub blob URL (auto-converted to raw), or paste via `cv_content`
 
 ---
 

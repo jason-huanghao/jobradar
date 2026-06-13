@@ -1,10 +1,10 @@
-"""Generate router — CV optimization and cover letter on demand."""
+"""Generate router — CV optimization and cover letter on demand, scoped to a user's active profile."""
 
 from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import select
 
@@ -14,8 +14,9 @@ from ...models.job import RawJob, ScoreBreakdown, ScoredJob
 from ...scoring.generator.cover_letter import generate_cover_letter
 from ...scoring.generator.cv_optimizer import optimize_cv
 from ...storage.db import get_session
-from ...storage.models import ApplicationRecord, Job, ScoredJobRecord
-from ...utils import profile_id as _profile_id
+from ...storage.models import Application, Job, Score
+from ...storage.repo import get_active_profile
+from ..deps import get_db_path, get_user_email
 from ..main import get_config
 
 router = APIRouter()
@@ -30,20 +31,25 @@ def _load_profile(cfg) -> CandidateProfile:
 
 
 @router.post("/application/{job_id}")
-def generate_application(job_id: str):
+def generate_application(
+    job_id: str,
+    db_path=Depends(get_db_path),
+    user_email: str = Depends(get_user_email),
+):
     """Generate optimized CV + cover letter for a specific job."""
     cfg = get_config()
-    db_path = cfg.resolve_path(cfg.server.db_path)
     llm = LLMClient(cfg.llm.text)
     profile = _load_profile(cfg)
 
     with next(get_session(db_path)) as session:
+        db_profile = get_active_profile(session, user_email)
+        if db_profile is None:
+            raise HTTPException(status_code=404, detail="No active profile")
+        profile_id = db_profile.id
         job_rec = session.get(Job, job_id)
         if not job_rec:
             raise HTTPException(status_code=404, detail="Job not found")
-        score_rec = session.exec(
-            select(ScoredJobRecord).where(ScoredJobRecord.job_id == job_id)
-        ).first()
+        score_rec = session.get(Score, (profile_id, job_id))
 
     raw_job = RawJob(
         id=job_rec.id, title=job_rec.title, company=job_rec.company,
@@ -68,9 +74,8 @@ def generate_application(job_id: str):
     cl_md = generate_cover_letter(scored, profile, llm)
 
     with next(get_session(db_path)) as session:
-        cand_id = _profile_id(profile)
-        app = ApplicationRecord(
-            job_id=job_id, candidate_id=cand_id,
+        app = Application(
+            profile_id=profile_id, job_id=job_id,
             cv_optimized_md=cv_md,
             cover_letter_md=cl_md,
             gaps=json.dumps(gaps),
@@ -89,16 +94,20 @@ def generate_application(job_id: str):
 
 
 @router.get("/application/{job_id}")
-def get_application(job_id: str):
-    """Return the most recent generated application for a job."""
-    cfg = get_config()
-    db_path = cfg.resolve_path(cfg.server.db_path)
-
+def get_application(
+    job_id: str,
+    db_path=Depends(get_db_path),
+    user_email: str = Depends(get_user_email),
+):
+    """Return the most recent generated application for a job, for this user's active profile."""
     with next(get_session(db_path)) as session:
+        db_profile = get_active_profile(session, user_email)
+        if db_profile is None:
+            raise HTTPException(status_code=404, detail="No application generated yet.")
         app = session.exec(
-            select(ApplicationRecord)
-            .where(ApplicationRecord.job_id == job_id)
-            .order_by(ApplicationRecord.created_at.desc())
+            select(Application)
+            .where(Application.profile_id == db_profile.id, Application.job_id == job_id)
+            .order_by(Application.created_at.desc())
             .limit(1)
         ).first()
 

@@ -121,3 +121,36 @@ def test_pipeline_scopes_scores(tmp_path, monkeypatch):
     with next(get_session(db)) as s:
         p = repo.get_active_profile(s, "a@x.com")
         assert repo.scored_job_ids(s, p.id) == {"j1"}
+
+
+def test_list_jobs_isolated(tmp_path):
+    from fastapi.testclient import TestClient
+    from jobradar.config import AppConfig
+    from jobradar.api.main import create_app
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage import repo
+    from jobradar.storage.models import Job, Score
+
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    cfg = AppConfig()
+    cfg.user.email = "a@x.com"
+    cfg.server.db_path = str(db)
+    cfg._config_dir = tmp_path
+
+    with next(get_session(db)) as s:
+        for email in ("a@x.com", "b@x.com"):
+            repo.resolve_or_create_user(s, email)
+            repo.create_profile_version(s, email, "cv.md", "{}")
+        s.add(Job(id="j1", source="t", title="Eng", url="https://x/1"))
+        pa = repo.get_active_profile(s, "a@x.com")
+        pb = repo.get_active_profile(s, "b@x.com")
+        s.add(Score(profile_id=pa.id, job_id="j1", overall=9.0))
+        s.add(Score(profile_id=pb.id, job_id="j1", overall=3.0))
+        s.commit()
+
+    client = TestClient(create_app(cfg))
+    r = client.get("/api/jobs", params={"user_email": "a@x.com"})
+    body = r.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["score"] == 9.0   # A's score, not B's

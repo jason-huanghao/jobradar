@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse
 from ...llm.client import LLMClient
 from ...profile.ingestor import ingest
 from ...storage.db import get_session
-from ...storage.models import Candidate
 from ..main import get_config
 
 router = APIRouter()

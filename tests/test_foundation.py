@@ -183,3 +183,24 @@ def test_apply_engine_scoped(tmp_path):
     sess_b = run_apply(db_path=db, profile_id=b_id, min_score=7.5,
                        dry_run=True, platforms=["bosszhipin"])
     assert len(sess_b.results) == 0
+
+
+def test_report_scoped(tmp_path):
+    from jobradar.report import generator
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage import repo
+    from jobradar.storage.models import Job, Score
+
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    with next(get_session(db)) as s:
+        repo.resolve_or_create_user(s, "a@x.com")
+        repo.create_profile_version(s, "a@x.com", "cv.md", "{}")
+        s.add(Job(id="j1", source="t", title="Eng", url="https://x/1"))
+        pa = repo.get_active_profile(s, "a@x.com")
+        s.add(Score(profile_id=pa.id, job_id="j1", overall=9.0))
+        s.commit()
+        pid = pa.id
+
+    jobs = generator.load_report_jobs(db, pid)
+    assert len(jobs) == 1 and jobs[0]["id"] == "j1"

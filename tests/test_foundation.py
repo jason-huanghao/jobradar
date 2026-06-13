@@ -71,3 +71,15 @@ def test_score_scoping():
         assert a_scores == {"j1"}
         rows = repo.list_scored(s, pa.id)
         assert len(rows) == 1 and rows[0][0].overall == 9.0
+
+
+def test_resolve_user_email():
+    import pytest
+    from jobradar.config import AppConfig, resolve_user_email
+    cfg = AppConfig()
+    cfg.user.email = "config@x.com"
+    assert resolve_user_email(cfg, None) == "config@x.com"
+    assert resolve_user_email(cfg, "flag@x.com") == "flag@x.com"   # flag wins
+    cfg.user.email = ""
+    with pytest.raises(ValueError, match="user email"):
+        resolve_user_email(cfg, None)

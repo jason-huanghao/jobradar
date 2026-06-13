@@ -51,6 +51,12 @@ class CandidateConfig(BaseModel):
         return (self.cv or self.cv_path).strip()
 
 
+class UserConfig(BaseModel):
+    """Stable identity for multi-tenant scoping. Required (no silent default)."""
+    email: str = ""
+    display_name: str = ""
+
+
 class SearchConfig(BaseModel):
     # Empty = worldwide (no location filter applied to queries)
     locations: list[str] = Field(default_factory=list)
@@ -139,6 +145,7 @@ class ServerConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
+    user: UserConfig = Field(default_factory=UserConfig)
     candidate: CandidateConfig = Field(default_factory=CandidateConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
@@ -229,3 +236,14 @@ def _find_config() -> Path:
         if env_cfg.exists():
             return env_cfg
     return here / "config.yaml"
+
+
+def resolve_user_email(config: AppConfig, override: str | None) -> str:
+    """Resolve identity: explicit override > config.user.email > error."""
+    email = (override or config.user.email or "").strip()
+    if not email:
+        raise ValueError(
+            "No user email configured. Set 'user.email' in config.yaml, "
+            "pass --user <email> on the CLI, or include user_email in the skill call."
+        )
+    return email

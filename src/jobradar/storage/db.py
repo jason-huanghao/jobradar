@@ -9,12 +9,12 @@ from sqlmodel import Session, SQLModel, create_engine
 
 # Import all table models so SQLModel.metadata picks them up
 from .models import (  # noqa: F401
-    ApplicationRecord,
-    Candidate,
-    FeedbackRecord,
+    Application,
     Job,
     PipelineRun,
-    ScoredJobRecord,
+    Profile,
+    Score,
+    User,
 )
 
 _engines: dict[str, object] = {}

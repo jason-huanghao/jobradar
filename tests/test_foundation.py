@@ -22,3 +22,15 @@ def test_schema_round_trip():
         s.commit()
         score = s.get(Score, ("p1", "j1"))
         assert score is not None and score.overall == 8.0
+
+
+def test_init_db_creates_tables(tmp_path):
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage.models import User
+    from sqlmodel import select
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    with next(get_session(db)) as s:
+        s.add(User(email="b@x.com"))
+        s.commit()
+        assert s.exec(select(User)).first().email == "b@x.com"

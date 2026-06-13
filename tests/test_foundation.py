@@ -215,3 +215,13 @@ def test_skill_requires_user(tmp_path, monkeypatch):
     out = json.loads(run_skill("run_pipeline", json.dumps({"mode": "dry-run"})))
     assert out.get("status") == "error"
     assert "user" in (out.get("error", "") + out.get("message", "")).lower()
+
+
+def test_stepstone_ids_deterministic():
+    from jobradar.sources.adapters import stepstone
+    from bs4 import BeautifulSoup
+    html = '''<a href="/stellenangebote--Senior-Engineer-12345">Senior Engineer Role</a>'''
+    jobs1 = stepstone._parse_page(BeautifulSoup(html, "html.parser"))
+    jobs2 = stepstone._parse_page(BeautifulSoup(html, "html.parser"))
+    assert jobs1 and jobs1[0].id == jobs2[0].id          # stable within run
+    assert not jobs1[0].id.startswith("stepstone-")       # uses make_id, not hash()

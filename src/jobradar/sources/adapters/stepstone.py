@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from ...models.job import RawJob, SearchQuery
 from ..base import JobSource
+from ..normalizer import make_id
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ def _parse_page(soup: BeautifulSoup) -> list[RawJob]:
         title_text = link.get_text(strip=True)
         if title_text and len(title_text) > 5:
             jobs.append(RawJob(
-                id=f"stepstone-{abs(hash(full_url)) % 10**8}",
+                id=make_id("stepstone", full_url, title_text),
                 title=title_text,
                 company="", location="", url=full_url,
                 description="", source="stepstone",
@@ -150,7 +151,7 @@ def _parse_article(article) -> RawJob | None:
         location = location_el.get_text(strip=True) if location_el else ""
         if title:
             return RawJob(
-                id=f"stepstone-{abs(hash(job_url)) % 10**8}",
+                id=make_id("stepstone", job_url, title),
                 title=title, company=company, location=location,
                 url=job_url, description="", source="stepstone",
             )
@@ -174,7 +175,7 @@ def _parse_jsonld(data) -> RawJob | None:
         location = (loc[0].get("address") or {}).get("addressLocality", "")
     url = data.get("url", "")
     return RawJob(
-        id=f"stepstone-{abs(hash(url)) % 10**8}",
+        id=make_id("stepstone", url, title),
         title=title, company=company, location=location, url=url,
         description=(data.get("description") or "")[:500],
         source="stepstone",

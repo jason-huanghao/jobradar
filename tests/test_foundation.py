@@ -83,3 +83,41 @@ def test_resolve_user_email():
     cfg.user.email = ""
     with pytest.raises(ValueError, match="user email"):
         resolve_user_email(cfg, None)
+
+
+def test_pipeline_scopes_scores(tmp_path, monkeypatch):
+    """Pipeline writes Score rows keyed on the active profile; skips re-scoring."""
+    from jobradar.config import AppConfig
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage import repo
+    from jobradar.models.job import RawJob, ScoredJob, ScoreBreakdown
+    from jobradar.models.candidate import CandidateProfile
+    import jobradar.pipeline as pl
+
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    cfg = AppConfig()
+    cfg.user.email = "a@x.com"
+    cfg.server.db_path = str(db)
+    cfg._config_dir = tmp_path
+
+    # Stub the expensive bits: LLM client, CV ingest, source fetch, scorer, generators.
+    monkeypatch.setattr(pl, "LLMClient", lambda *a, **k: object())
+    prof = CandidateProfile(); prof.personal.name = "A"
+    monkeypatch.setattr(pl, "ingest", lambda *a, **k: prof)
+    monkeypatch.setattr(pl, "build_queries", lambda *a, **k: [])
+    rj = RawJob(id="j1", title="Eng", company="Co", url="https://x/1", source="test")
+    monkeypatch.setattr(pl.SourceRegistry, "fetch_all", lambda self, *a, **k: [rj])
+    monkeypatch.setattr(pl, "hard_filter", lambda jobs, cfg: (jobs, 0))
+    sj = ScoredJob(job=rj, score=8.0, breakdown=ScoreBreakdown(skills_match=8.0))
+    monkeypatch.setattr(pl, "score_jobs", lambda *a, **k: [sj])
+    monkeypatch.setattr(pl, "optimize_cv", lambda *a, **k: ("cv", []))
+    monkeypatch.setattr(pl, "generate_cover_letter", lambda *a, **k: "cl")
+
+    pipe = pl.JobRadarPipeline(cfg, user_email="a@x.com")
+    result = pipe.run(mode="full")
+    assert result.jobs_scored == 1
+
+    with next(get_session(db)) as s:
+        p = repo.get_active_profile(s, "a@x.com")
+        assert repo.scored_job_ids(s, p.id) == {"j1"}

@@ -19,10 +19,15 @@ from .scoring.generator.cv_optimizer import optimize_cv
 from .scoring.hard_filter import apply as hard_filter
 from .scoring.scorer import score_jobs
 from .sources.query_builder import build_queries
-from .sources.registry import build_registry
+from .sources.registry import SourceRegistry, build_registry
 from .storage.db import get_session, init_db
-from .storage.models import ApplicationRecord, Job, PipelineRun, ScoredJobRecord
-from .utils import profile_id as _profile_id
+from .storage.models import Application, Job, PipelineRun, Score
+from .storage.repo import (
+    create_profile_version,
+    get_active_profile,
+    resolve_or_create_user,
+    scored_job_ids,
+)
 
 logger = logging.getLogger(__name__)
 Mode = Literal["full", "quick", "score-only", "dry-run"]
@@ -47,8 +52,9 @@ class PipelineResult:
 
 
 class JobRadarPipeline:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, user_email: str) -> None:
         self.config = config
+        self.user_email = user_email
         self.llm = LLMClient(config.llm.text)
         db_path = config.resolve_path(config.server.db_path)
         init_db(db_path)
@@ -65,7 +71,9 @@ class JobRadarPipeline:
                 on_progress(PipelineProgress(event=event, data=data))
 
         with next(get_session(self._db_path)) as session:
-            run_record = PipelineRun(candidate_id="", mode=mode, started_at=datetime.utcnow())
+            run_record = PipelineRun(
+                user_email=self.user_email, mode=mode, started_at=datetime.utcnow()
+            )
             session.add(run_record)
             session.commit()
             session.refresh(run_record)
@@ -74,6 +82,7 @@ class JobRadarPipeline:
             try:
                 result = self._execute(mode, session, run_id, emit)
                 run_record.status = "done"
+                run_record.profile_id = getattr(self, "_profile_id", "")
                 run_record.finished_at = datetime.utcnow()
                 run_record.jobs_fetched = result.jobs_fetched
                 run_record.jobs_new = result.jobs_new
@@ -109,20 +118,32 @@ class JobRadarPipeline:
             return PipelineResult(run_id=run_id, jobs_fetched=0, jobs_new=0,
                                   jobs_scored=0, jobs_generated=0, top_jobs=[], status="done")
 
-        # Step 1: Parse CV → profile
+        # Step 1: Parse CV → profile, then resolve the active DB profile
         cache_dir = cfg.resolve_path(cfg.server.cache_dir)
         cv_source = cfg.candidate.effective_cv()
-        # URL → pass as-is; local path → resolve relative to config dir
         if cv_source.startswith("http://") or cv_source.startswith("https://"):
             cv_resolved = cv_source
         else:
             cv_resolved = str(cfg.resolve_path(cv_source))
         profile = ingest(cv_resolved, self.llm, cache_dir=cache_dir)
+
+        resolve_or_create_user(session, self.user_email,
+                               display_name=profile.personal.name)
+        active = get_active_profile(session, self.user_email)
+        profile_json = profile.model_dump_json()
+        if active is None or active.cv_source != cv_resolved:
+            active = create_profile_version(session, self.user_email,
+                                            cv_resolved, profile_json)
+        else:
+            active.profile_json = profile_json
+            session.add(active)
+        session.commit()
+        self._profile_id = active.id
         emit("profile_done", name=profile.personal.name)
 
         # Step 2: Build search queries
         # quick mode: cap both query count AND per-source results
-        quick_limit = cfg.search.quick_max_results if hasattr(cfg.search, 'quick_max_results') else 5
+        quick_limit = cfg.search.quick_max_results
         max_results_override = quick_limit if mode == "quick" else None
         queries = build_queries(profile, cfg, max_results_override=max_results_override)
         if mode == "quick":
@@ -159,12 +180,9 @@ class JobRadarPipeline:
             dropped = 0
         emit("filter_done", kept=len(to_score), dropped=dropped)
 
-        # Step 6: LLM scoring (skip already-scored jobs)
-        cand_id = _profile_id(profile)
-        scored_ids = set(session.exec(
-            select(ScoredJobRecord.job_id).where(ScoredJobRecord.candidate_id == cand_id)
-        ).all())
-        unscored = [j for j in to_score if j.id not in scored_ids]
+        # Step 6: LLM scoring (skip already-scored jobs for THIS profile)
+        already = scored_job_ids(session, self._profile_id)
+        unscored = [j for j in to_score if j.id not in already]
         emit("scoring_start", total=len(unscored))
 
         scored_jobs = score_jobs(
@@ -173,8 +191,8 @@ class JobRadarPipeline:
             on_batch_done=lambda s: emit("score_progress", scored=len(s)),
         )
         for sj in scored_jobs:
-            session.add(ScoredJobRecord(
-                job_id=sj.job.id, candidate_id=cand_id,
+            session.add(Score(
+                profile_id=self._profile_id, job_id=sj.job.id,
                 overall=sj.score,
                 skills_match=sj.breakdown.skills_match,
                 seniority_fit=sj.breakdown.seniority_fit,
@@ -193,8 +211,8 @@ class JobRadarPipeline:
         for sj in top[:5]:
             cv_md, gaps = optimize_cv(sj.job, profile, self.llm)
             cl_md = generate_cover_letter(sj, profile, self.llm)
-            session.add(ApplicationRecord(
-                job_id=sj.job.id, candidate_id=cand_id,
+            session.add(Application(
+                profile_id=self._profile_id, job_id=sj.job.id,
                 cv_optimized_md=cv_md, cover_letter_md=cl_md, gaps=json.dumps(gaps),
             ))
             sj.cv_optimized_md = cv_md

@@ -89,11 +89,16 @@ def test_hard_filter_drops_excluded():
 
     cfg = AppConfig()
 
+    # Use a recent date so the freshness filter doesn't drop everything
+    # (keyword exclusion is what this test exercises).
+    from datetime import datetime, timedelta
+    recent = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
     def job(title: str) -> RawJob:
         return RawJob(
             id=title, title=title, company="Co", location="Berlin",
             url=f"https://x.com/{title}", description="desc", source="test",
-            date_posted="2026-03-17",
+            date_posted=recent,
         )
 
     jobs = [job("Senior Engineer"), job("Praktikum Backend"), job("Werkstudent AI")]
@@ -252,37 +257,25 @@ def test_apply_history(tmp_path):
 
 def test_apply_engine_dry_run(tmp_path):
     from jobradar.apply.engine import run_apply
-    from jobradar.storage.db import init_db
-    from jobradar.storage.models import Job, ScoredJobRecord
-    from sqlmodel import Session, create_engine
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage import repo
+    from jobradar.storage.models import Job, Score
 
     db_path = tmp_path / "test.db"
     init_db(db_path)
+    with next(get_session(db_path)) as s:
+        repo.resolve_or_create_user(s, "t@x.com")
+        repo.create_profile_version(s, "t@x.com", "cv.md", "{}")
+        p = repo.get_active_profile(s, "t@x.com")
+        s.add(Job(id="zboss1", title="AI工程师", company="字节跳动", location="北京",
+                  url="https://www.zhipin.com/job/zboss1", description="AI job",
+                  source="bosszhipin", date_posted="2026-03-15"))
+        s.add(Score(profile_id=p.id, job_id="zboss1", overall=8.5))
+        s.commit()
+        pid = p.id
 
-    engine = create_engine(f"sqlite:///{db_path}")
-    with Session(engine) as session:
-        session.add(Job(
-            id="zboss1", title="AI工程师", company="字节跳动",
-            location="北京", url="https://www.zhipin.com/job/zboss1",
-            description="AI job", source="bosszhipin",
-            date_posted="2026-03-15", job_type="fulltime",
-            salary="", remote=False, raw_extra="{}",
-        ))
-        session.add(ScoredJobRecord(
-            job_id="zboss1", candidate_id="test",
-            overall=8.5, skills_match=9.0, seniority_fit=8.0,
-            location_fit=8.0, language_fit=9.0, visa_friendly=7.0,
-            growth_potential=8.5, reasoning="great match",
-        ))
-        session.commit()
-
-    result = run_apply(
-        db_path=db_path,
-        min_score=7.5,
-        dry_run=True,
-        confirm_each=False,
-        platforms=["bosszhipin"],
-    )
+    result = run_apply(db_path=db_path, profile_id=pid, min_score=7.5,
+                       dry_run=True, platforms=["bosszhipin"])
     assert len(result.results) == 1
     assert result.results[0].status.value == "dry_run"
 

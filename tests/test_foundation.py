@@ -204,3 +204,14 @@ def test_report_scoped(tmp_path):
 
     jobs = generator.load_report_jobs(db, pid)
     assert len(jobs) == 1 and jobs[0]["id"] == "j1"
+
+
+def test_skill_requires_user(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("JOBRADAR_DIR", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    from jobradar.interfaces.skill import run_skill
+    # run_pipeline without any user_email and no config must error clearly
+    out = json.loads(run_skill("run_pipeline", json.dumps({"mode": "dry-run"})))
+    assert out.get("status") == "error"
+    assert "user" in (out.get("error", "") + out.get("message", "")).lower()

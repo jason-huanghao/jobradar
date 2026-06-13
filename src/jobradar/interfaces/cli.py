@@ -47,6 +47,10 @@ def init(
         None, "--locations",
         help="Comma-separated search locations, e.g. 'Berlin,Hannover,Remote'",
     ),
+    email: Optional[str] = typer.Option(
+        None, "--email",
+        help="Your user email — identifies your profile (user.email in config).",
+    ),
     yes: bool = typer.Option(False, "-y", "--yes", help="Non-interactive: accept all defaults"),
 ):
     """Interactive setup wizard — configure LLM key, CV, and search locations.
@@ -75,6 +79,14 @@ def init(
         else:
             console.print("[yellow]⚠ config.example.yaml not found — creating minimal config.yaml[/yellow]")
             cfg_path.write_text(_MINIMAL_CONFIG)
+
+    # ── Step 1b: User email (identity) ─────────────────────────────
+    user_email = (email or "").strip()
+    if not user_email and not yes:
+        user_email = typer.prompt("  Your email (identifies your profile)", default="").strip()
+    if user_email:
+        _patch_config_user_email(cfg_path, user_email)
+        console.print(f"  ✓ User email set: [cyan]{user_email}[/cyan]")
 
     # ── Step 2: API key ────────────────────────────────────────────
     console.print("")
@@ -378,6 +390,22 @@ def _patch_config(cfg_path: Path, key: str, value: str) -> None:
     cfg_path.write_text(txt)
 
 
+def _patch_config_user_email(cfg_path: Path, email: str) -> None:
+    """Set user.email in config.yaml, inserting the `user:` block if absent."""
+    import re
+    txt = cfg_path.read_text()
+    if re.search(r'^user:\s*$', txt, re.MULTILINE):
+        # `user:` block exists — replace or append its email key
+        if re.search(r'^user:\s*\n(?:\s+\w+:.*\n)*?\s+email:.*', txt, re.MULTILINE):
+            txt = re.sub(r'(^user:\s*\n(?:\s+\w+:.*\n)*?\s+email:).*',
+                         rf'\1 {email}', txt, flags=re.MULTILINE)
+        else:
+            txt = re.sub(r'^(user:\s*\n)', rf'\1  email: {email}\n', txt, flags=re.MULTILINE)
+    else:
+        txt = txt.rstrip("\n") + f"\n\nuser:\n  email: {email}\n"
+    cfg_path.write_text(txt)
+
+
 def _patch_config_locations(cfg_path: Path, locs: list[str]) -> None:
     import re
     txt = cfg_path.read_text()
@@ -511,6 +539,7 @@ def update(
         help="CV source: file path (.md/.pdf/.docx/.txt) or URL. Overrides config.",
     ),
     config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
+    user: str = typer.Option("", "--user", help="User email (overrides config user.email)"),
     limit: Optional[int] = typer.Option(
         None, "--limit",
         help="Max results per source per query (e.g. --limit 3 for quick tests).",
@@ -520,11 +549,17 @@ def update(
 
     Quick smoke test:  jobradar update --mode quick --limit 3
     """
-    from ..config import load_config
+    from ..config import load_config, resolve_user_email
     from ..llm.env_probe import probe_llm_env
     from ..pipeline import JobRadarPipeline
 
     cfg = load_config(config, cv_override=cv)
+
+    try:
+        user_email = resolve_user_email(cfg, user or None)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
 
     if limit is not None:
         cfg.search.quick_max_results = limit
@@ -560,7 +595,7 @@ def update(
         if msg:
             console.print(msg)
 
-    pipeline = JobRadarPipeline(cfg)
+    pipeline = JobRadarPipeline(cfg, user_email)
     result = pipeline.run(mode=mode, on_progress=on_progress)
 
     if result.status == "failed":
@@ -575,7 +610,7 @@ def status():
     """Show DB stats and pipeline status."""
     from ..config import load_config
     from ..storage.db import get_session, init_db
-    from ..storage.models import Job, ScoredJobRecord
+    from ..storage.models import Job, Score
     from sqlmodel import func, select
 
     cfg = load_config()
@@ -584,7 +619,7 @@ def status():
 
     with next(get_session(db_path)) as session:
         job_count   = session.exec(select(func.count(Job.id))).one()
-        score_count = session.exec(select(func.count(ScoredJobRecord.job_id))).one()
+        score_count = session.exec(select(func.count(Score.job_id))).one()
 
     table = Table(show_header=False)
     table.add_column(style="dim")
@@ -651,6 +686,7 @@ def report(
     min_score: float = typer.Option(0.0, "--min-score", help="Only include jobs above this score"),
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open report in browser"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Custom output path"),
+    user: str = typer.Option("", "--user", help="User email (overrides config user.email)"),
 ):
     """Generate a self-contained HTML report of all scored jobs.
 
@@ -662,8 +698,10 @@ def report(
     """
     import webbrowser
     from datetime import datetime
-    from ..config import load_config
-    from ..report.generator import generate_report, jobs_from_db
+    from ..config import load_config, resolve_user_email
+    from ..report.generator import generate_report, load_report_jobs
+    from ..storage.db import get_session
+    from ..storage.repo import get_active_profile
 
     cfg = load_config()
     db_path = cfg.resolve_path(cfg.server.db_path)
@@ -672,8 +710,21 @@ def report(
         console.print("[yellow]⚠ No database found — run [bold]jobradar run[/bold] first.[/yellow]")
         raise typer.Exit(1)
 
+    try:
+        user_email = resolve_user_email(cfg, user or None)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    with next(get_session(db_path)) as session:
+        profile = get_active_profile(session, user_email)
+        if profile is None:
+            console.print("[yellow]No active profile — run [bold]jobradar update[/bold] first.[/yellow]")
+            raise typer.Exit(1)
+        profile_id = profile.id
+
     console.print("[dim]Loading jobs from database…[/dim]")
-    jobs = jobs_from_db(db_path, min_score=min_score)
+    jobs = load_report_jobs(db_path, profile_id, min_score=min_score)
 
     if not jobs:
         console.print(f"[yellow]No scored jobs found (min_score={min_score}).[/yellow]")
@@ -782,6 +833,7 @@ def apply(
                                         help="Max applications this run"),
     platforms: Optional[str] = typer.Option(None, "--platforms",
                                             help="Comma-separated: bosszhipin,linkedin"),
+    user: str = typer.Option("", "--user", help="User email (overrides config user.email)"),
 ):
     """Apply to top-scored jobs automatically.
 
@@ -790,8 +842,10 @@ def apply(
         jobradar apply --auto --min-score 8  # only best matches
         jobradar apply --dry-run             # preview without submitting
     """
-    from ..config import load_config
+    from ..config import load_config, resolve_user_email
     from ..apply.engine import run_apply
+    from ..storage.db import get_session
+    from ..storage.repo import get_active_profile
 
     cfg = load_config()
     db_path = cfg.resolve_path(cfg.server.db_path)
@@ -799,6 +853,19 @@ def apply(
     if not db_path.exists():
         console.print("[yellow]No database — run [bold]jobradar run[/bold] first.[/yellow]")
         raise typer.Exit(1)
+
+    try:
+        user_email = resolve_user_email(cfg, user or None)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    with next(get_session(db_path)) as session:
+        profile = get_active_profile(session, user_email)
+        if profile is None:
+            console.print("[yellow]No active profile — run [bold]jobradar update[/bold] first.[/yellow]")
+            raise typer.Exit(1)
+        profile_id = profile.id
 
     platform_list = (
         [p.strip() for p in platforms.split(",") if p.strip()]
@@ -819,13 +886,20 @@ def apply(
         icon = icons.get(r.status.value, "?")
         console.print(f"  {icon} {r.title} @ {r.company} — {r.message}")
 
+    confirm = (
+        (lambda job: typer.confirm(
+            f"Apply to {job['title']} @ {job.get('company','')} [{job['score']}]?"))
+        if not auto and not dry_run else None
+    )
+
     session = run_apply(
         db_path=db_path,
+        profile_id=profile_id,
         min_score=min_score,
         dry_run=dry_run,
-        confirm_each=not auto and not dry_run,
         daily_limit=daily_cap,
         platforms=platform_list,
+        confirm=confirm,
         on_result=on_result,
     )
 

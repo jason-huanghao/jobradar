@@ -17,6 +17,7 @@ router = APIRouter()
 
 class RunRequest(BaseModel):
     mode: str = "full"  # full | quick | score-only | dry-run
+    user_email: str = ""
 
 
 @router.post("/run")
@@ -25,8 +26,14 @@ def trigger_run(req: RunRequest):
 
     For long runs use the WebSocket endpoint /ws/pipeline for live progress.
     """
+    from ...config import resolve_user_email
+
     cfg = get_config()
-    pipeline = JobRadarPipeline(cfg)
+    try:
+        user_email = resolve_user_email(cfg, req.user_email or None)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    pipeline = JobRadarPipeline(cfg, user_email)
     result = pipeline.run(mode=req.mode)
     return JSONResponse(content={
         "run_id": result.run_id,

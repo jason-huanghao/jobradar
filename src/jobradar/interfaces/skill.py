@@ -555,13 +555,15 @@ class JobRadarSkill:
 
     def _run_pipeline(self, p: dict) -> str:
         resp = httpx.post(f"{self.base_url}/api/pipeline/run",
-                          json={"mode": p.get("mode", "quick")}, timeout=300)
+                          json={"mode": p.get("mode", "quick"),
+                                "user_email": p.get("user_email", "")}, timeout=300)
         return resp.text
 
     def _list_jobs(self, p: dict) -> str:
         params = {k: v for k, v in {"min_score": p.get("min_score", 6),
                                      "source": p.get("source", ""),
-                                     "limit": p.get("limit", 20)}.items()
+                                     "limit": p.get("limit", 20),
+                                     "user_email": p.get("user_email", "")}.items()
                   if v is not None and v != ""}
         return httpx.get(f"{self.base_url}/api/jobs", params=params, timeout=30).text
 
@@ -569,17 +571,20 @@ class JobRadarSkill:
         jid = p.get("job_id", "")
         if not jid:
             return json.dumps({"error": "job_id is required"})
-        return httpx.get(f"{self.base_url}/api/jobs/{jid}", timeout=15).text
+        return httpx.get(f"{self.base_url}/api/jobs/{jid}",
+                         params={"user_email": p.get("user_email", "")}, timeout=15).text
 
     def _generate_application(self, p: dict) -> str:
         jid = p.get("job_id", "")
         if not jid:
             return json.dumps({"error": "job_id is required"})
-        return httpx.post(f"{self.base_url}/api/generate/application/{jid}", timeout=120).text
+        return httpx.post(f"{self.base_url}/api/generate/application/{jid}",
+                          params={"user_email": p.get("user_email", "")}, timeout=120).text
 
     def _get_digest(self, p: dict) -> str:
         return httpx.get(f"{self.base_url}/api/outputs/digest",
-                         params={"min_score": p.get("min_score", 6)}, timeout=30).text
+                         params={"min_score": p.get("min_score", 6),
+                                 "user_email": p.get("user_email", "")}, timeout=30).text
 
     def _get_report(self, p: dict) -> str:
         """Generate HTML report and optionally publish to GitHub Pages."""
@@ -590,9 +595,17 @@ class JobRadarSkill:
             from ..config import load_config
             cfg = load_config()
             db_path = cfg.resolve_path(cfg.server.db_path)
-            from ..report.generator import generate_report, jobs_from_db
+            from ..storage.db import get_session
+            from ..storage.repo import get_active_profile
+            with next(get_session(db_path)) as session:
+                profile = get_active_profile(session, p.get("user_email", ""))
+                if profile is None:
+                    return _json.dumps({"status": "error",
+                                        "error": "No active profile — run the pipeline first."})
+                profile_id = profile.id
+            from ..report.generator import generate_report, load_report_jobs
             min_score = float(p.get("min_score", 0))
-            jobs = jobs_from_db(db_path, min_score=min_score)
+            jobs = load_report_jobs(db_path, profile_id, min_score)
             if not jobs:
                 return _json.dumps({"error": "No scored jobs found. Run the pipeline first."})
             report_dir = cfg.resolve_path(cfg.report.report_dir)
@@ -626,6 +639,13 @@ class JobRadarSkill:
             from ..apply.engine import run_apply
             cfg = load_config()
             db_path = cfg.resolve_path(cfg.server.db_path)
+            from ..storage.db import get_session
+            from ..storage.repo import get_active_profile
+            with next(get_session(db_path)) as db_session:
+                profile = get_active_profile(db_session, p.get("user_email", ""))
+                if profile is None:
+                    return _json.dumps({"error": "No active profile — run the pipeline first."})
+                profile_id = profile.id
             min_score = float(p.get("min_score", cfg.scoring.auto_apply_min_score))
             dry_run = bool(p.get("dry_run", True))   # safe default
             platforms = p.get("platforms", ["bosszhipin", "linkedin"])
@@ -633,9 +653,9 @@ class JobRadarSkill:
                 platforms = [x.strip() for x in platforms.split(",")]
             session = run_apply(
                 db_path=db_path,
+                profile_id=profile_id,
                 min_score=min_score,
                 dry_run=dry_run,
-                confirm_each=False,
                 daily_limit=int(p.get("daily_limit", 50)),
                 platforms=platforms,
             )
@@ -668,6 +688,36 @@ def run_skill(tool_name: str, params_json: str | dict = "{}") -> str:
         # 'setup' tool is handled without requiring a running server or full config
         if tool_name == "setup":
             return _handle_setup(params)
+
+        # Identity gate — fires BEFORE the _is_configured() gate for tools that
+        # operate on a specific user's data. Without a resolvable user email we
+        # cannot scope reads/writes, so error out clearly.
+        IDENTITY_TOOLS = {
+            "run_pipeline", "list_jobs", "get_job_detail",
+            "generate_application", "get_digest", "get_report", "apply_jobs",
+        }
+        user_email = ""
+        if tool_name in IDENTITY_TOOLS:
+            from ..config import resolve_user_email
+            try:
+                from ..config import load_config
+                cfg = load_config()
+            except Exception:
+                cfg = None
+            try:
+                if cfg is not None:
+                    user_email = resolve_user_email(cfg, params.get("user_email"))
+                else:
+                    override = (params.get("user_email") or "").strip()
+                    if not override:
+                        raise ValueError(
+                            "No user email configured. Pass user_email in the skill "
+                            "call or set user.email in config.yaml."
+                        )
+                    user_email = override
+            except ValueError as exc:
+                return json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False)
+            params["user_email"] = user_email
 
         # All other tools require configuration
         ok, message = _is_configured()

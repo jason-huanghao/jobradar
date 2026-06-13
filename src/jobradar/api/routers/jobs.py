@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from sqlmodel import select
 
 from ...storage.db import get_session
 from ...storage.models import Job, Score

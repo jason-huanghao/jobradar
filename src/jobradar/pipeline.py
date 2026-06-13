@@ -19,7 +19,8 @@ from .scoring.generator.cv_optimizer import optimize_cv
 from .scoring.hard_filter import apply as hard_filter
 from .scoring.scorer import score_jobs
 from .sources.query_builder import build_queries
-from .sources.registry import SourceRegistry, build_registry
+from .sources.registry import build_registry
+from .sources.registry import SourceRegistry  # noqa: F401  (patched via pl.SourceRegistry in tests)
 from .storage.db import get_session, init_db
 from .storage.models import Application, Job, PipelineRun, Score
 from .storage.repo import (

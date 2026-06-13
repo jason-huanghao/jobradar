@@ -154,3 +154,32 @@ def test_list_jobs_isolated(tmp_path):
     body = r.json()
     assert body["total"] == 1
     assert body["jobs"][0]["score"] == 9.0   # A's score, not B's
+
+
+def test_apply_engine_scoped(tmp_path):
+    from jobradar.apply.engine import run_apply
+    from jobradar.storage.db import init_db, get_session
+    from jobradar.storage import repo
+    from jobradar.storage.models import Job, Score
+
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    with next(get_session(db)) as s:
+        for email in ("a@x.com", "b@x.com"):
+            repo.resolve_or_create_user(s, email)
+            repo.create_profile_version(s, email, "cv.md", "{}")
+        s.add(Job(id="j1", source="bosszhipin", title="AI", url="https://www.zhipin.com/job/1"))
+        pa = repo.get_active_profile(s, "a@x.com")
+        pb = repo.get_active_profile(s, "b@x.com")
+        s.add(Score(profile_id=pa.id, job_id="j1", overall=9.0))   # A: eligible
+        s.add(Score(profile_id=pb.id, job_id="j1", overall=2.0))   # B: not
+        s.commit()
+        a_id, b_id = pa.id, pb.id
+
+    sess = run_apply(db_path=db, profile_id=a_id, min_score=7.5,
+                     dry_run=True, platforms=["bosszhipin"])
+    assert len(sess.results) == 1
+    # B's low score must not leak in via A's run
+    sess_b = run_apply(db_path=db, profile_id=b_id, min_score=7.5,
+                       dry_run=True, platforms=["bosszhipin"])
+    assert len(sess_b.results) == 0

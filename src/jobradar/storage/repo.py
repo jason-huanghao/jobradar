@@ -57,13 +57,17 @@ def scored_job_ids(session: Session, profile_id: str) -> set[str]:
     ).all())
 
 
-def list_scored(session: Session, profile_id: str, min_score: float = 0.0):
-    """Return list[(Score, Job)] for a profile, score-descending."""
+def list_scored(session: Session, profile_id: str, min_score: float = 0.0,
+                include_expired: bool = False):
+    """Return list[(Score, Job)] for a profile, score-descending.
+    Expired jobs are hidden unless include_expired is True."""
     query = (
         select(Score, Job)
         .join(Job, Score.job_id == Job.id)
         .where(Score.profile_id == profile_id)
     )
+    if not include_expired:
+        query = query.where(Job.status != "expired")
     if min_score > 0:
         query = query.where(Score.overall >= min_score)
     query = query.order_by(Score.overall.desc())

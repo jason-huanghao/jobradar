@@ -126,3 +126,25 @@ def test_sweep_flips_stale_and_is_idempotent():
 
         # second run is a no-op
         assert sweep_expired(s, NOW, staleness_days=7) == 0
+
+
+# ── list_scored hides expired by default ──────────────────────────
+def test_list_scored_hides_expired_by_default():
+    from jobradar.storage import repo
+    from jobradar.storage.models import Job, Score
+
+    eng = _mem_engine()
+    with Session(eng) as s:
+        repo.resolve_or_create_user(s, "a@x.com")
+        p = repo.create_profile_version(s, "a@x.com", "cv.md", "{}")
+        s.add(Job(id="live", source="t", title="A", url="https://x/1", status="active"))
+        s.add(Job(id="gone", source="t", title="B", url="https://x/2", status="expired"))
+        s.add(Score(profile_id=p.id, job_id="live", overall=8.0))
+        s.add(Score(profile_id=p.id, job_id="gone", overall=9.0))
+        s.commit()
+
+        default_ids = [job.id for _, job in repo.list_scored(s, p.id)]
+        assert default_ids == ["live"]
+
+        all_ids = sorted(job.id for _, job in repo.list_scored(s, p.id, include_expired=True))
+        assert all_ids == ["gone", "live"]

@@ -16,6 +16,7 @@ from .models.job import RawJob, ScoredJob
 from .profile.ingestor import ingest
 from .scoring.generator.cover_letter import generate_cover_letter
 from .scoring.generator.cv_optimizer import optimize_cv
+from .scoring.freshness import compute_expires_at
 from .scoring.hard_filter import apply as hard_filter
 from .scoring.scorer import score_jobs
 from .sources.query_builder import build_queries
@@ -162,18 +163,12 @@ class JobRadarPipeline:
         )
         emit("fetch_done", total=len(raw_jobs))
 
-        # Step 4: Persist new jobs
+        # Step 4: Persist — insert new jobs, touch re-seen ones
         existing_ids = set(session.exec(select(Job.id)).all())
         new_jobs = [j for j in raw_jobs if j.id not in existing_ids]
-        for j in new_jobs:
-            session.add(Job(
-                id=j.id, source=j.source, title=j.title, company=j.company,
-                location=j.location, description=j.description, url=j.url,
-                date_posted=j.date_posted, job_type=j.job_type, salary=j.salary,
-                remote=j.remote, raw_extra=json.dumps(j.raw_extra),
-            ))
-        session.commit()
-        emit("db_saved", new=len(new_jobs))
+        jobs_new = _persist_jobs(session, raw_jobs, cfg.search.max_days_old,
+                                 datetime.utcnow())
+        emit("db_saved", new=jobs_new)
 
         # Step 5: Hard filter
         if mode != "score-only":
@@ -238,3 +233,37 @@ def _db_to_raw(j: Job) -> RawJob:
         date_posted=j.date_posted, job_type=j.job_type, salary=j.salary,
         remote=j.remote, raw_extra=json.loads(j.raw_extra or "{}"),
     )
+
+
+def _persist_jobs(session: Session, raw_jobs: list[RawJob], ttl_days: int,
+                  now: datetime) -> int:
+    """Insert new jobs (with computed expires_at) and touch re-seen ones
+    (refresh last_seen_at, backfill valid_through/expires_at). Returns the
+    count of newly-inserted jobs."""
+    existing_ids = set(session.exec(select(Job.id)).all())
+    new_jobs = [j for j in raw_jobs if j.id not in existing_ids]
+    seen_jobs = [j for j in raw_jobs if j.id in existing_ids]
+
+    for j in new_jobs:
+        session.add(Job(
+            id=j.id, source=j.source, title=j.title, company=j.company,
+            location=j.location, description=j.description, url=j.url,
+            date_posted=j.date_posted, job_type=j.job_type, salary=j.salary,
+            remote=j.remote, raw_extra=json.dumps(j.raw_extra),
+            valid_through=j.valid_through,
+            expires_at=compute_expires_at(j.date_posted, j.valid_through, ttl_days),
+            last_seen_at=now,
+        ))
+
+    for j in seen_jobs:
+        row = session.get(Job, j.id)
+        if row is None:
+            continue
+        row.last_seen_at = now
+        if not row.valid_through and j.valid_through:
+            row.valid_through = j.valid_through
+            row.expires_at = compute_expires_at(row.date_posted, j.valid_through, ttl_days)
+        session.add(row)
+
+    session.commit()
+    return len(new_jobs)

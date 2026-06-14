@@ -148,3 +148,38 @@ def test_list_scored_hides_expired_by_default():
 
         all_ids = sorted(job.id for _, job in repo.list_scored(s, p.id, include_expired=True))
         assert all_ids == ["gone", "live"]
+
+
+# ── pipeline persist: insert-or-touch ─────────────────────────────
+def test_persist_sets_expires_at_and_touches_seen():
+    from jobradar.models.job import RawJob
+    from jobradar.pipeline import _persist_jobs
+    from jobradar.storage.models import Job
+
+    eng = _mem_engine()
+    posted = (NOW - timedelta(days=2)).date().isoformat()
+    with Session(eng) as s:
+        # first sighting: inserts with computed expires_at
+        new1 = _persist_jobs(
+            s, [RawJob(id="j1", source="t", title="Eng", url="https://x/1",
+                       date_posted=posted, valid_through="")],
+            ttl_days=14, now=NOW,
+        )
+        assert new1 == 1
+        row = s.get(Job, "j1")
+        assert row.expires_at != ""
+        assert row.expires_at.startswith("2026")   # posted + 14 days
+        first_seen = row.last_seen_at
+
+        # re-sighting later with a now-known deadline: touches last_seen + backfills
+        later = NOW + timedelta(days=1)
+        new2 = _persist_jobs(
+            s, [RawJob(id="j1", source="t", title="Eng", url="https://x/1",
+                       date_posted=posted, valid_through="2026-06-20")],
+            ttl_days=14, now=later,
+        )
+        assert new2 == 0
+        row = s.get(Job, "j1")
+        assert row.last_seen_at == later and row.last_seen_at != first_seen
+        assert row.valid_through == "2026-06-20"
+        assert row.expires_at.startswith("2026-06-20")

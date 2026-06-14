@@ -14,9 +14,9 @@ from .config import AppConfig
 from .llm.client import LLMClient
 from .models.job import RawJob, ScoredJob
 from .profile.ingestor import ingest
+from .scoring.freshness import compute_expires_at
 from .scoring.generator.cover_letter import generate_cover_letter
 from .scoring.generator.cv_optimizer import optimize_cv
-from .scoring.freshness import compute_expires_at
 from .scoring.hard_filter import apply as hard_filter
 from .scoring.scorer import score_jobs
 from .sources.query_builder import build_queries

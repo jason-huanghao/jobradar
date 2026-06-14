@@ -190,3 +190,38 @@ def test_pipeline_exports_sweep_expired():
     """The sweep step at run start calls repo.sweep_expired; verify it's wired."""
     import jobradar.pipeline as pl
     assert hasattr(pl, "sweep_expired")
+
+
+# ── API hides expired by default ──────────────────────────────────
+def test_api_jobs_hides_expired(tmp_path):
+    from fastapi.testclient import TestClient
+    from jobradar.api.main import create_app
+    from jobradar.config import AppConfig
+    from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
+    from jobradar.storage.models import Job, Score
+
+    db = tmp_path / "jobradar.db"
+    init_db(db)
+    with next(get_session(db)) as s:
+        repo.resolve_or_create_user(s, "a@x.com")
+        p = repo.create_profile_version(s, "a@x.com", "cv.md", "{}")
+        s.add(Job(id="live", source="t", title="A", url="https://x/1", status="active"))
+        s.add(Job(id="gone", source="t", title="B", url="https://x/2", status="expired"))
+        s.add(Score(profile_id=p.id, job_id="live", overall=8.0))
+        s.add(Score(profile_id=p.id, job_id="gone", overall=9.0))
+        s.commit()
+
+    # create_app(config=...) sets the module-global config that deps.py reads
+    # via get_config(); get_user_email then resolves cfg.user.email when no
+    # ?user_email query param is supplied.
+    cfg = AppConfig()
+    cfg.user.email = "a@x.com"
+    cfg.server.db_path = str(db)          # absolute path; resolve_path passes it through
+    client = TestClient(create_app(config=cfg))
+
+    default_ids = {j["id"] for j in client.get("/api/jobs").json()["jobs"]}
+    assert default_ids == {"live"}
+
+    all_ids = {j["id"] for j in client.get("/api/jobs?include_expired=true").json()["jobs"]}
+    assert all_ids == {"live", "gone"}

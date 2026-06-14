@@ -1,12 +1,11 @@
 """initial
 
 Revision ID: 0001
-Revises: 
+Revises:
 """
-from alembic import op
 import sqlalchemy as sa
 import sqlmodel
-
+from alembic import op
 
 revision = '0001'
 down_revision = None
@@ -53,7 +52,9 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('pipeline_run', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_pipeline_run_user_email'), ['user_email'], unique=False)
+        batch_op.create_index(
+            batch_op.f('ix_pipeline_run_user_email'), ['user_email'], unique=False
+        )
 
     op.create_table('user',
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),

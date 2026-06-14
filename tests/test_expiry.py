@@ -96,3 +96,33 @@ def test_hard_filter_drops_past_deadline():
     jobs = [RawJob(title="Eng", date_posted=recent, valid_through=past)]
     kept, dropped = hard_filter(jobs, cfg)
     assert kept == [] and dropped == 1
+
+
+# ── sweep_expired ─────────────────────────────────────────────────
+def test_sweep_flips_stale_and_is_idempotent():
+    from jobradar.storage.models import Job
+    from jobradar.storage.repo import sweep_expired
+
+    eng = _mem_engine()
+    with Session(eng) as s:
+        old_seen = NOW - timedelta(days=30)
+        fresh_seen = NOW - timedelta(days=1)
+        # by past deadline
+        s.add(Job(id="dead", source="t", title="A", url="https://x/1",
+                  expires_at="2026-06-01", last_seen_at=fresh_seen))
+        # by staleness (no deadline, not seen in 30 days)
+        s.add(Job(id="stale", source="t", title="B", url="https://x/2",
+                  expires_at="", last_seen_at=old_seen))
+        # fresh: no deadline, recently seen
+        s.add(Job(id="live", source="t", title="C", url="https://x/3",
+                  expires_at="", last_seen_at=fresh_seen))
+        s.commit()
+
+        count = sweep_expired(s, NOW, staleness_days=7)
+        assert count == 2
+        assert s.get(Job, "dead").status == "expired"
+        assert s.get(Job, "stale").status == "expired"
+        assert s.get(Job, "live").status == "active"
+
+        # second run is a no-op
+        assert sweep_expired(s, NOW, staleness_days=7) == 0

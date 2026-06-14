@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlmodel import Session, select
 
+from ..scoring.freshness import is_expired
 from .models import Job, Profile, Score, User
 
 
@@ -66,3 +68,17 @@ def list_scored(session: Session, profile_id: str, min_score: float = 0.0):
         query = query.where(Score.overall >= min_score)
     query = query.order_by(Score.overall.desc())
     return session.exec(query).all()
+
+
+def sweep_expired(session: Session, now: datetime, staleness_days: int) -> int:
+    """Flip active jobs whose deadline passed or that went stale to expired.
+    Flag only — never deletes. Idempotent. Returns the number flipped."""
+    jobs = session.exec(select(Job).where(Job.status == "active")).all()
+    count = 0
+    for job in jobs:
+        if is_expired(job.expires_at, job.last_seen_at, now, staleness_days):
+            job.status = "expired"
+            session.add(job)
+            count += 1
+    session.commit()
+    return count

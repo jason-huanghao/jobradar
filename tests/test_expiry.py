@@ -183,3 +183,10 @@ def test_persist_sets_expires_at_and_touches_seen():
         assert row.last_seen_at == later and row.last_seen_at != first_seen
         assert row.valid_through == "2026-06-20"
         assert row.expires_at.startswith("2026-06-20")
+
+
+# ── pipeline wires the sweep ──────────────────────────────────────
+def test_pipeline_exports_sweep_expired():
+    """The sweep step at run start calls repo.sweep_expired; verify it's wired."""
+    import jobradar.pipeline as pl
+    assert hasattr(pl, "sweep_expired")

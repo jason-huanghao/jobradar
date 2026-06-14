@@ -31,6 +31,7 @@ from .storage.repo import (
     get_active_profile,
     resolve_or_create_user,
     scored_job_ids,
+    sweep_expired,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,10 @@ class JobRadarPipeline:
             emit("queries_built", count=0)
             return PipelineResult(run_id=run_id, jobs_fetched=0, jobs_new=0,
                                   jobs_scored=0, jobs_generated=0, top_jobs=[], status="done")
+
+        # Step 0: sweep stale/expired jobs (read paths hide them)
+        swept = sweep_expired(session, datetime.utcnow(), cfg.search.staleness_days)
+        emit("swept", count=swept)
 
         # Step 1: Parse CV → profile, then resolve the active DB profile
         cache_dir = cfg.resolve_path(cfg.server.cache_dir)

@@ -1,23 +1,27 @@
-"""Database engine, session factory, and initialisation."""
+"""Database engine, session factory, and Alembic-backed initialisation."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Generator
 
-from sqlmodel import Session, SQLModel, create_engine
+from alembic import command
+from alembic.config import Config
+from sqlmodel import Session, create_engine
 
-# Import all table models so SQLModel.metadata picks them up
+# Import all table models so SQLModel.metadata is populated.
 from .models import (  # noqa: F401
-    ApplicationRecord,
-    Candidate,
-    FeedbackRecord,
+    Application,
     Job,
     PipelineRun,
-    ScoredJobRecord,
+    Profile,
+    Score,
+    User,
 )
 
 _engines: dict[str, object] = {}
+_REPO_ROOT = Path(__file__).resolve().parents[3]   # .../jobradar
+_ALEMBIC_INI = _REPO_ROOT / "alembic.ini"
 
 
 def get_engine(db_path: str | Path = "./jobradar.db"):
@@ -32,13 +36,15 @@ def get_engine(db_path: str | Path = "./jobradar.db"):
 
 
 def init_db(db_path: str | Path = "./jobradar.db") -> None:
-    """Create all tables if they don't exist. Auto-creates parent dirs. Safe to call repeatedly."""
+    """Create/upgrade the schema by running Alembic migrations to head."""
     path = Path(db_path).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    SQLModel.metadata.create_all(get_engine(path))
+    cfg = Config(str(_ALEMBIC_INI))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{path}")
+    command.upgrade(cfg, "head")
 
 
 def get_session(db_path: str | Path = "./jobradar.db") -> Generator[Session, None, None]:
-    """Yield a database session."""
     with Session(get_engine(Path(db_path).resolve())) as session:
         yield session

@@ -20,6 +20,7 @@ dependencies = [
     "typer>=0.12.0",
     # Storage
     "sqlmodel>=0.0.18",
+    "alembic>=1.13",
     # Job sources (EU, no Playwright required)
     "python-jobspy>=1.1.0",
     "beautifulsoup4>=4.12.0",

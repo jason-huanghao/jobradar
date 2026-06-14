@@ -1,39 +1,34 @@
-"""Outputs router — Excel export and Markdown digest."""
+"""Outputs router — Excel export and Markdown digest, scoped to a user's active profile."""
 
 from __future__ import annotations
 
 import io
-from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import Response, StreamingResponse
-from sqlmodel import select
 
 from ...storage.db import get_session
-from ...storage.models import Job, ScoredJobRecord
-from ..main import get_config
+from ...storage.repo import get_active_profile, list_scored
+from ..deps import get_db_path, get_user_email
 
 router = APIRouter()
 
 
 @router.get("/excel")
-def download_excel():
-    """Export all scored jobs as an Excel file."""
+def download_excel(
+    db_path=Depends(get_db_path),
+    user_email: str = Depends(get_user_email),
+):
+    """Export the user's scored jobs as an Excel file."""
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill
     except ImportError:
         return Response(content="openpyxl not installed", status_code=500)
 
-    cfg = get_config()
-    db_path = cfg.resolve_path(cfg.server.db_path)
-
     with next(get_session(db_path)) as session:
-        rows = session.exec(
-            select(ScoredJobRecord, Job)
-            .join(Job, ScoredJobRecord.job_id == Job.id)
-            .order_by(ScoredJobRecord.overall.desc())
-        ).all()
+        profile = get_active_profile(session, user_email)
+        rows = list_scored(session, profile.id) if profile else []
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -62,7 +57,6 @@ def download_excel():
             score.status, score.reasoning, job.url,
         ])
 
-    # Auto-width columns
     for col in ws.columns:
         max_len = max((len(str(c.value or "")) for c in col), default=0)
         ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 50)
@@ -79,19 +73,15 @@ def download_excel():
 
 
 @router.get("/digest")
-def get_digest(min_score: float = 6.0):
-    """Return a Markdown digest of top-scoring jobs."""
-    cfg = get_config()
-    db_path = cfg.resolve_path(cfg.server.db_path)
-
+def get_digest(
+    min_score: float = 6.0,
+    db_path=Depends(get_db_path),
+    user_email: str = Depends(get_user_email),
+):
+    """Return a Markdown digest of the user's top-scoring jobs."""
     with next(get_session(db_path)) as session:
-        rows = session.exec(
-            select(ScoredJobRecord, Job)
-            .join(Job, ScoredJobRecord.job_id == Job.id)
-            .where(ScoredJobRecord.overall >= min_score)
-            .order_by(ScoredJobRecord.overall.desc())
-            .limit(20)
-        ).all()
+        profile = get_active_profile(session, user_email)
+        rows = list_scored(session, profile.id, min_score=min_score)[:20] if profile else []
 
     lines = [f"# JobRadar Digest — Top {len(rows)} Matches\n"]
     for score, job in rows:

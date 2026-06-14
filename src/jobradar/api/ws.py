@@ -24,7 +24,8 @@ async def pipeline_ws(websocket: WebSocket):
             raw = await websocket.receive_text()
             msg = json.loads(raw)
             if msg.get("action") == "run":
-                await _run_pipeline(websocket, msg.get("mode", "full"))
+                await _run_pipeline(websocket, msg.get("mode", "full"),
+                                    msg.get("user_email", ""))
             else:
                 await _send(websocket, "error", message=f"Unknown action: {msg.get('action')}")
     except WebSocketDisconnect:
@@ -33,8 +34,15 @@ async def pipeline_ws(websocket: WebSocket):
         logger.error("WS error: %s", exc)
 
 
-async def _run_pipeline(ws: WebSocket, mode: str):
+async def _run_pipeline(ws: WebSocket, mode: str, user_email: str = ""):
+    from ..config import resolve_user_email
+
     cfg = get_config()
+    try:
+        user_email = resolve_user_email(cfg, user_email or None)
+    except ValueError as exc:
+        await _send(ws, "error", message=str(exc))
+        return
     queue: asyncio.Queue[PipelineProgress | None] = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
@@ -44,7 +52,7 @@ async def _run_pipeline(ws: WebSocket, mode: str):
     # Run pipeline in thread pool so it doesn't block the event loop
     async def run_in_thread():
         try:
-            pipeline = JobRadarPipeline(cfg)
+            pipeline = JobRadarPipeline(cfg, user_email)
             await loop.run_in_executor(None, lambda: pipeline.run(mode=mode, on_progress=on_progress))
         except Exception as exc:
             queue.put_nowait(PipelineProgress(event="error", data={"message": str(exc)}))

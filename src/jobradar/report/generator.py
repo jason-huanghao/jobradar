@@ -48,44 +48,35 @@ def generate_report(
     return output_path
 
 
-def jobs_from_db(db_path: Path, min_score: float = 0.0) -> list[dict[str, Any]]:
-    """Load scored jobs from SQLite DB into report-ready dicts."""
-    from sqlmodel import select
+def load_report_jobs(db_path: Path, profile_id: str, min_score: float = 0.0) -> list[dict[str, Any]]:
+    """Load a profile's scored jobs as report-ready dicts (score-descending)."""
     from ..storage.db import get_session, init_db
-    from ..storage.models import Job, ScoredJobRecord
+    from ..storage.repo import list_scored
 
     init_db(db_path)
-    results = []
+    out = []
     with next(get_session(db_path)) as session:
-        scored = session.exec(select(ScoredJobRecord)).all()
-        job_map = {j.id: j for j in session.exec(select(Job)).all()}
-        for s in scored:
-            if s.overall < min_score:
-                continue
-            j = job_map.get(s.job_id)
-            if not j:
-                continue
-            results.append({
-                "id": s.job_id,
-                "title": j.title,
-                "company": j.company or "",
-                "location": j.location or "",
-                "score": round(s.overall, 1),
-                "source": j.source,
-                "url": j.url or "",
-                "date_posted": str(j.date_posted or ""),
-                "reasoning": s.reasoning or "",
+        for score_rec, job in list_scored(session, profile_id, min_score=min_score):
+            out.append({
+                "id": job.id,
+                "title": job.title,
+                "company": job.company or "",
+                "location": job.location or "",
+                "score": round(score_rec.overall, 1),
+                "source": job.source,
+                "url": job.url or "",
+                "date_posted": str(job.date_posted or ""),
+                "reasoning": score_rec.reasoning or "",
                 "breakdown": {
-                    "skills_match":    round(s.skills_match or 0, 1),
-                    "seniority_fit":   round(s.seniority_fit or 0, 1),
-                    "location_fit":    round(s.location_fit or 0, 1),
-                    "language_fit":    round(s.language_fit or 0, 1),
-                    "visa_friendly":   round(s.visa_friendly or 0, 1),
-                    "growth_potential":round(s.growth_potential or 0, 1),
+                    "skills_match":    round(score_rec.skills_match or 0, 1),
+                    "seniority_fit":   round(score_rec.seniority_fit or 0, 1),
+                    "location_fit":    round(score_rec.location_fit or 0, 1),
+                    "language_fit":    round(score_rec.language_fit or 0, 1),
+                    "visa_friendly":   round(score_rec.visa_friendly or 0, 1),
+                    "growth_potential":round(score_rec.growth_potential or 0, 1),
                 },
             })
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results
+    return out
 
 
 def _render_html(jobs_json: str, profile_name: str, generated_at: datetime) -> str:

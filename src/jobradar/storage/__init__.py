@@ -2,22 +2,22 @@
 
 from .db import get_engine, get_session, init_db
 from .models import (
-    ApplicationRecord,
-    Candidate,
-    FeedbackRecord,
+    Application,
     Job,
     PipelineRun,
-    ScoredJobRecord,
+    Profile,
+    Score,
+    User,
 )
 
 __all__ = [
     "init_db",
     "get_engine",
     "get_session",
-    "Candidate",
+    "User",
+    "Profile",
     "Job",
-    "ScoredJobRecord",
-    "ApplicationRecord",
-    "FeedbackRecord",
+    "Score",
+    "Application",
     "PipelineRun",
 ]

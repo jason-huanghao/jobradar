@@ -15,28 +15,31 @@ logger = logging.getLogger(__name__)
 def run_apply(
     *,
     db_path: Path,
+    profile_id: str,
     min_score: float = 7.5,
     dry_run: bool = False,
-    confirm_each: bool = False,
     daily_limit: int = 50,
     platforms: list[str] | None = None,
+    confirm: Callable[[dict], bool] | None = None,
     on_result: Callable[[ApplyResult], None] | None = None,
 ) -> ApplySession:
-    """Apply to all eligible jobs in the DB above min_score.
+    """Apply to all eligible jobs for one profile above min_score.
 
     Args:
         db_path: Path to SQLite database
+        profile_id: Profile whose scored jobs to apply for
         min_score: Only apply to jobs scored at or above this threshold
         dry_run: Preview what would happen — no actual submissions
-        confirm_each: Interactively confirm each job before applying
         daily_limit: Maximum applications per day across all platforms
         platforms: Which platforms to apply on (default: all configured)
+        confirm: Optional callback invoked with each job dict; return False
+            to skip it. The caller owns any prompting/IO. Not consulted on dry runs.
         on_result: Callback called after each application attempt
 
     Returns:
         ApplySession with all results
     """
-    jobs = _load_eligible_jobs(db_path, min_score)
+    jobs = _load_eligible_jobs(db_path, profile_id, min_score)
     history = ApplyHistory()
     session = ApplySession()
 
@@ -57,21 +60,17 @@ def run_apply(
         if applier is None:
             continue
 
-        # Interactive confirm
-        if confirm_each and not dry_run:
-            print(f"\n[{job['score']:.1f}] {job['title']} @ {job['company']} ({job['platform']})")
-            print(f"  URL: {job['url']}")
-            ans = input("  Apply? [y/N] ").strip().lower()
-            if ans != "y":
-                result = ApplyResult(
-                    job_id=job["id"], title=job["title"],
-                    company=job.get("company", ""), platform=job["platform"],
-                    status=ApplyStatus.SKIPPED, message="user skipped",
-                )
-                session.results.append(result)
-                if on_result:
-                    on_result(result)
-                continue
+        # Confirmation via injected callback (caller owns any prompting/IO)
+        if confirm is not None and not dry_run and not confirm(job):
+            result = ApplyResult(
+                job_id=job["id"], title=job["title"],
+                company=job.get("company", ""), platform=job["platform"],
+                status=ApplyStatus.SKIPPED, message="user skipped",
+            )
+            session.results.append(result)
+            if on_result:
+                on_result(result)
+            continue
 
         result = applier.apply(job, dry_run=dry_run)
         session.results.append(result)
@@ -83,36 +82,25 @@ def run_apply(
     return session
 
 
-def _load_eligible_jobs(db_path: Path, min_score: float) -> list[dict]:
-    """Load scored jobs from DB, sorted best-first, skipping already-applied."""
-    from sqlmodel import select
+def _load_eligible_jobs(db_path: Path, profile_id: str, min_score: float) -> list[dict]:
+    """Load scored jobs for one profile, best-first, skipping already-applied."""
     from ..storage.db import get_session, init_db
-    from ..storage.models import Job, ScoredJobRecord
+    from ..storage.repo import list_scored
 
     init_db(db_path)
     history = ApplyHistory()
     results = []
 
     with next(get_session(db_path)) as session:
-        scored = session.exec(select(ScoredJobRecord)).all()
-        job_map = {j.id: j for j in session.exec(select(Job)).all()}
-
-        for s in scored:
-            if s.overall < min_score:
+        for score_rec, job in list_scored(session, profile_id, min_score=min_score):
+            if history.already_applied(job.id):
                 continue
-            if history.already_applied(s.job_id):
-                continue
-            j = job_map.get(s.job_id)
-            if not j or not j.url:
+            if not job.url:
                 continue
             results.append({
-                "id": s.job_id,
-                "title": j.title,
-                "company": j.company or "",
-                "location": j.location or "",
-                "score": round(s.overall, 1),
-                "platform": j.source,
-                "url": j.url,
+                "id": job.id, "title": job.title, "company": job.company or "",
+                "location": job.location or "", "score": round(score_rec.overall, 1),
+                "platform": job.source, "url": job.url,
             })
 
     results.sort(key=lambda x: x["score"], reverse=True)

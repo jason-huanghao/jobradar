@@ -630,6 +630,28 @@ def status():
     console.print(table)
 
 
+# ── jobradar sweep ─────────────────────────────────────────────────
+
+@app.command()
+def sweep(
+    config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
+    user: str = typer.Option("", "--user", help="User email (accepted for CLI symmetry; sweep is global)"),
+):
+    """Mark stale or past-deadline jobs as expired (hidden from reports & apply)."""
+    from datetime import datetime
+
+    from ..config import load_config
+    from ..storage.db import get_session, init_db
+    from ..storage.repo import sweep_expired
+
+    cfg = load_config(config)
+    db_path = cfg.resolve_path(cfg.server.db_path)
+    init_db(db_path)
+    with next(get_session(db_path)) as session:
+        count = sweep_expired(session, datetime.utcnow(), cfg.search.staleness_days)
+    console.print(f"[green]Swept {count} job(s) to expired.[/green]")
+
+
 # ── jobradar health ────────────────────────────────────────────────
 
 @app.command()

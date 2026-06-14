@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
-
-from dateutil import parser as dateutil_parser
+from datetime import datetime
 
 from ..config import AppConfig
 from ..models.job import RawJob
+from .freshness import is_too_old
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +16,13 @@ def apply(jobs: list[RawJob], config: AppConfig) -> tuple[list[RawJob], int]:
     """Run all hard filters. Returns (kept, dropped_count)."""
     kept = []
     dropped = 0
-    cutoff = datetime.utcnow() - timedelta(days=config.search.max_days_old)
+    now = datetime.utcnow()
+    ttl_days = config.search.max_days_old
     kw_lower = [k.lower() for k in config.search.exclude_keywords]
     co_lower = [c.lower() for c in config.search.exclude_companies]
 
     for job in jobs:
-        reason = _check(job, cutoff, kw_lower, co_lower)
+        reason = _check(job, now, ttl_days, kw_lower, co_lower)
         if reason:
             logger.debug("DROP [%s] '%s' @ '%s' — %s", job.source, job.title, job.company, reason)
             dropped += 1
@@ -35,7 +35,8 @@ def apply(jobs: list[RawJob], config: AppConfig) -> tuple[list[RawJob], int]:
 
 def _check(
     job: RawJob,
-    cutoff: datetime,
+    now: datetime,
+    ttl_days: int,
     kw_lower: list[str],
     co_lower: list[str],
 ) -> str | None:
@@ -52,14 +53,9 @@ def _check(
         if kw in title_lower or kw in desc_lower:
             return f"excluded keyword: {kw}"
 
-    # 3. Too old
-    if job.date_posted:
-        try:
-            posted = dateutil_parser.parse(job.date_posted, ignoretz=True)
-            if posted < cutoff:
-                return f"too old: {job.date_posted}"
-        except Exception:
-            pass  # unparseable date — keep the job
+    # 3. Too old (posting age) or explicit deadline already passed
+    if is_too_old(job.date_posted, job.valid_through, now, ttl_days):
+        return f"too old / expired: posted={job.date_posted} deadline={job.valid_through}"
 
     # 4. Missing essential fields
     if not job.title:

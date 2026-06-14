@@ -81,3 +81,18 @@ def test_rawjob_has_valid_through():
     j = RawJob(title="Eng", valid_through="2026-07-01")
     assert j.valid_through == "2026-07-01"
     assert RawJob(title="Eng").valid_through == ""
+
+
+# ── hard_filter honors valid_through ──────────────────────────────
+def test_hard_filter_drops_past_deadline():
+    from jobradar.config import AppConfig
+    from jobradar.models.job import RawJob
+    from jobradar.scoring.hard_filter import apply as hard_filter
+
+    cfg = AppConfig()
+    recent = (datetime.utcnow() - timedelta(days=1)).date().isoformat()
+    past = (datetime.utcnow() - timedelta(days=2)).date().isoformat()
+    # recent posting, but deadline already passed -> dropped
+    jobs = [RawJob(title="Eng", date_posted=recent, valid_through=past)]
+    kept, dropped = hard_filter(jobs, cfg)
+    assert kept == [] and dropped == 1

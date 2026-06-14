@@ -73,3 +73,11 @@ def test_is_too_old_unparseable_keeps():
     from jobradar.scoring.freshness import is_too_old
     assert is_too_old("", "", NOW, ttl_days=14) is False
     assert is_too_old("not a date", "", NOW, ttl_days=14) is False
+
+
+# ── RawJob carries valid_through ──────────────────────────────────
+def test_rawjob_has_valid_through():
+    from jobradar.models.job import RawJob
+    j = RawJob(title="Eng", valid_through="2026-07-01")
+    assert j.valid_through == "2026-07-01"
+    assert RawJob(title="Eng").valid_through == ""

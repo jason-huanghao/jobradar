@@ -180,4 +180,5 @@ def _parse_jsonld(data) -> RawJob | None:
         description=(data.get("description") or "")[:500],
         source="stepstone",
         date_posted=data.get("datePosted", ""),
+        valid_through=data.get("validThrough", ""),
     )

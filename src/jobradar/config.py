@@ -64,6 +64,7 @@ class SearchConfig(BaseModel):
     postal_code: str = ""
     max_results_per_source: int = 20
     max_days_old: int = 14
+    staleness_days: int = 7          # not re-seen in N days -> expired
     quick_max_results: int = 5
     job_types: list[str] = Field(default_factory=lambda: ["fulltime"])
     custom_keywords: list[str] = Field(default_factory=list)

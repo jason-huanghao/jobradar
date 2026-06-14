@@ -1,0 +1,75 @@
+"""Expiry & freshness tests. No LLM involved."""
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+
+from sqlmodel import Session, SQLModel, create_engine
+
+
+def _mem_engine():
+    eng = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(eng)
+    return eng
+
+
+NOW = datetime(2026, 6, 14, 12, 0, 0)
+
+
+# ── freshness.compute_expires_at ──────────────────────────────────
+def test_compute_expires_at_prefers_earliest():
+    from jobradar.scoring.freshness import compute_expires_at
+    # valid_through (2026-06-20) is earlier than date_posted+14 (2026-06-24)
+    out = compute_expires_at("2026-06-10", "2026-06-20", ttl_days=14)
+    assert out.startswith("2026-06-20")
+
+
+def test_compute_expires_at_posting_only():
+    from jobradar.scoring.freshness import compute_expires_at
+    out = compute_expires_at("2026-06-10", "", ttl_days=14)
+    assert out.startswith("2026-06-24")
+
+
+def test_compute_expires_at_unknown():
+    from jobradar.scoring.freshness import compute_expires_at
+    assert compute_expires_at("", "", ttl_days=14) == ""
+    assert compute_expires_at("garbage", "also bad", ttl_days=14) == ""
+
+
+# ── freshness.is_expired ──────────────────────────────────────────
+def test_is_expired_by_deadline():
+    from jobradar.scoring.freshness import is_expired
+    assert is_expired("2026-06-01", NOW, NOW, staleness_days=7) is True
+
+
+def test_is_expired_by_staleness():
+    from jobradar.scoring.freshness import is_expired
+    old_seen = NOW - timedelta(days=10)
+    assert is_expired("", old_seen, NOW, staleness_days=7) is True
+
+
+def test_is_expired_stays_active():
+    from jobradar.scoring.freshness import is_expired
+    fresh_seen = NOW - timedelta(days=1)
+    assert is_expired("", fresh_seen, NOW, staleness_days=7) is False
+    assert is_expired("2026-12-31", fresh_seen, NOW, staleness_days=7) is False
+
+
+# ── freshness.is_too_old ──────────────────────────────────────────
+def test_is_too_old_by_posting_age():
+    from jobradar.scoring.freshness import is_too_old
+    # posted 20 days before NOW, ttl 14 -> too old
+    assert is_too_old("2026-05-25", "", NOW, ttl_days=14) is True
+    # posted 5 days before NOW -> fresh
+    assert is_too_old("2026-06-09", "", NOW, ttl_days=14) is False
+
+
+def test_is_too_old_by_past_deadline():
+    from jobradar.scoring.freshness import is_too_old
+    # recent posting but the deadline already passed -> too old
+    assert is_too_old("2026-06-13", "2026-06-01", NOW, ttl_days=14) is True
+
+
+def test_is_too_old_unparseable_keeps():
+    from jobradar.scoring.freshness import is_too_old
+    assert is_too_old("", "", NOW, ttl_days=14) is False
+    assert is_too_old("not a date", "", NOW, ttl_days=14) is False

@@ -17,6 +17,7 @@ class RawJob(BaseModel):
     description: str = ""
     source: str = ""              # arbeitsagentur | jobspy:indeed | bosszhipin …
     date_posted: str = ""
+    valid_through: str = ""        # source deadline (JSON-LD validThrough); "" if unknown
     job_type: str = "fulltime"
     salary: str = ""
     remote: bool | None = None

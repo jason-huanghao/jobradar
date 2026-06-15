@@ -20,6 +20,7 @@ def list_jobs(
     min_score: float = Query(default=0.0, ge=0, le=10),
     source: str = Query(default=""),
     status: str = Query(default=""),
+    include_expired: bool = Query(default=False),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
     db_path=Depends(get_db_path),
@@ -29,7 +30,8 @@ def list_jobs(
         profile = get_active_profile(session, user_email)
         if profile is None:
             return JSONResponse(content={"jobs": [], "total": 0})
-        rows = list_scored(session, profile.id, min_score=min_score)
+        rows = list_scored(session, profile.id, min_score=min_score,
+                           include_expired=include_expired)
 
     results = []
     for score_rec, job in rows:

@@ -64,6 +64,9 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
+# E501 (line length) intentionally not enforced: most violations are long HTML-template
+# strings, help text, and prompt strings where rewrapping is churn with no readability win.
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

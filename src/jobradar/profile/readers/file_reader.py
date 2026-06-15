@@ -95,8 +95,9 @@ class FileAndUrlReader(ProfileReader):
 
     def _parse_pdf(self, data: bytes, source: str) -> str:
         try:
-            from pypdf import PdfReader
             import io
+
+            from pypdf import PdfReader
         except ImportError:
             raise ImportError("pypdf required: pip install pypdf")
         reader = PdfReader(io.BytesIO(data))
@@ -107,7 +108,9 @@ class FileAndUrlReader(ProfileReader):
 
     def _parse_docx(self, data: bytes, source: str) -> str:
         try:
-            import docx, io
+            import io
+
+            import docx
         except ImportError:
             raise ImportError("python-docx required: pip install python-docx")
         doc = docx.Document(io.BytesIO(data))

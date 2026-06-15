@@ -102,8 +102,12 @@ class LLMClient:
         """Try json_mode first; fall back to structured parsing.
 
         Handles providers like Volcengine Ark that don't support response_format.
+        Whether json mode is attempted is driven by the provider catalog.
         """
-        if self.endpoint.provider in ("volcengine", "ollama", "lm_studio"):
+        from .catalog import get_provider
+
+        provider = get_provider(self.endpoint.provider)
+        if provider is not None and not provider.supports_json_mode:
             return self.complete_structured(prompt, system=system, temperature=temperature)
         try:
             return self.complete_json(prompt, system=system, temperature=temperature)

@@ -28,7 +28,7 @@ def _profile_summary(profile: CandidateProfile) -> str:
     if profile.target.locations:
         parts.append(f"Preferred locations: {', '.join(profile.target.locations)}")
     if profile.personal.languages:
-        langs = [f"{l.language} ({l.level})" for l in profile.personal.languages]
+        langs = [f"{lang.language} ({lang.level})" for lang in profile.personal.languages]
         parts.append(f"Languages: {', '.join(langs)}")
     if profile.skills.technical:
         parts.append(f"Technical skills: {', '.join(profile.skills.technical[:15])}")

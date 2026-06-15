@@ -13,13 +13,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ..llm.catalog import CATALOG as _CATALOG
+
 app = typer.Typer(name="jobradar", help="AI-powered job search agent", add_completion=False,
                   context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 console = Console()
 
-# ── Supported LLM providers for init wizard (derived from the curated catalog) ──
-from ..llm.catalog import CATALOG as _CATALOG
-
+# Supported LLM providers for init wizard, derived from the curated catalog.
 # (display_name, env_var, base_url, default_model) — wizard's expected tuple shape.
 _PROVIDERS = [(p.label, p.api_key_env, p.base_url, p.default_model) for p in _CATALOG]
 
@@ -132,7 +132,7 @@ def _resolve_api_key(cli_key: Optional[str], yes: bool, project_dir: Path) -> Op
     # 1. CLI flag wins
     if cli_key:
         if "=" not in cli_key:
-            console.print(f"[red]--api-key must be ENV_VAR=value, e.g. ARK_API_KEY=abc123[/red]")
+            console.print("[red]--api-key must be ENV_VAR=value, e.g. ARK_API_KEY=abc123[/red]")
             return None
         env_var, _, val = cli_key.partition("=")
         console.print(f"  ✓ Using provided key: [cyan]{env_var}[/cyan]")
@@ -267,7 +267,6 @@ def _resolve_cv(cli_cv: Optional[str], yes: bool, project_dir: Path) -> Optional
 def _import_cv(source: str, project_dir: Path) -> Optional[str]:
     """Copy/download a CV to cv/cv_current.{ext} and return the relative path."""
     import shutil
-    from urllib.parse import urlparse
 
     cv_dir = project_dir / "cv"
     cv_dir.mkdir(exist_ok=True)
@@ -296,7 +295,7 @@ def _import_cv(source: str, project_dir: Path) -> Optional[str]:
         lines = sys.stdin.read()
         dest = cv_dir / "cv_current.md"
         dest.write_text(lines, encoding="utf-8")
-        console.print(f"  ✓ CV read from stdin → [cyan]./cv/cv_current.md[/cyan]")
+        console.print("  ✓ CV read from stdin → [cyan]./cv/cv_current.md[/cyan]")
         return "./cv/cv_current.md"
 
     # Local file
@@ -323,14 +322,14 @@ def _import_cv(source: str, project_dir: Path) -> Optional[str]:
 
 def _resolve_locations(cli_locs: Optional[str], yes: bool) -> Optional[list[str]]:
     if cli_locs:
-        return [l.strip() for l in cli_locs.split(",") if l.strip()]
+        return [loc.strip() for loc in cli_locs.split(",") if loc.strip()]
     if yes:
         return None
     locs = typer.prompt(
         "  Search locations (comma-separated, e.g. Berlin,Hannover,Remote)",
         default="Berlin,Remote",
     )
-    return [l.strip() for l in locs.split(",") if l.strip()]
+    return [loc.strip() for loc in locs.split(",") if loc.strip()]
 
 
 def _run_health_check(project_dir: Path) -> None:
@@ -349,12 +348,12 @@ def _run_health_check(project_dir: Path) -> None:
     if found:
         try:
             llm = LLMClient(cfg.llm.text)
-            resp = llm.complete("Say OK in one word.", temperature=0.0)
+            llm.complete("Say OK in one word.", temperature=0.0)
             console.print(f"  [green]✓ LLM ({cfg.llm.text.model})[/green] ping OK")
         except Exception as e:
             console.print(f"  [yellow]⚠ LLM ping failed: {e}[/yellow]")
     else:
-        console.print(f"  [yellow]⚠ No LLM key found — run [bold]jobradar init[/bold] to add one[/yellow]")
+        console.print("  [yellow]⚠ No LLM key found — run [bold]jobradar init[/bold] to add one[/yellow]")
 
     cv_path = cfg.resolve_path(cfg.candidate.cv_path)
     if cv_path.exists():
@@ -369,7 +368,7 @@ def _write_env(project_dir: Path, key_line: str) -> None:
         existing = env_file.read_text()
         k = key_line.split("=")[0]
         # Replace existing key or append
-        lines = [l for l in existing.splitlines() if not l.startswith(k)]
+        lines = [ln for ln in existing.splitlines() if not ln.startswith(k)]
         lines.append(key_line)
         env_file.write_text("\n".join(lines) + "\n")
     else:
@@ -402,7 +401,7 @@ def _patch_config_user_email(cfg_path: Path, email: str) -> None:
 def _patch_config_locations(cfg_path: Path, locs: list[str]) -> None:
     import re
     txt = cfg_path.read_text()
-    new_locs = "\n".join(f"    - {l}" for l in locs)
+    new_locs = "\n".join(f"    - {loc}" for loc in locs)
     txt = re.sub(
         r'locations:\s*\n(\s+-[^\n]*\n)+',
         f'locations:\n{new_locs}\n',
@@ -601,10 +600,11 @@ def update(
 @app.command()
 def status():
     """Show DB stats and pipeline status."""
+    from sqlmodel import func, select
+
     from ..config import load_config
     from ..storage.db import get_session, init_db
     from ..storage.models import Job, Score
-    from sqlmodel import func, select
 
     cfg = load_config()
     db_path = cfg.resolve_path(cfg.server.db_path)
@@ -808,6 +808,7 @@ def report(
     """
     import webbrowser
     from datetime import datetime
+
     from ..config import load_config, resolve_user_email
     from ..report.generator import generate_report, load_report_jobs
     from ..storage.db import get_session
@@ -853,8 +854,8 @@ def report(
     if publish:
         console.print("[dim]Publishing to GitHub Pages…[/dim]")
         try:
-            from ..report.publisher import publish_to_github_pages
             from ..config import _find_config
+            from ..report.publisher import publish_to_github_pages
             repo_dir = _find_config().parent
             url = publish_to_github_pages(report_path, repo_dir=repo_dir)
             console.print(f"[bold green]✓ Published:[/bold green] {url}")
@@ -952,8 +953,8 @@ def apply(
         jobradar apply --auto --min-score 8  # only best matches
         jobradar apply --dry-run             # preview without submitting
     """
-    from ..config import load_config, resolve_user_email
     from ..apply.engine import run_apply
+    from ..config import load_config, resolve_user_email
     from ..storage.db import get_session
     from ..storage.repo import get_active_profile
 

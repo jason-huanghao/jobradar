@@ -11,7 +11,7 @@ def _mem_engine():
 
 
 def test_schema_round_trip():
-    from jobradar.storage.models import User, Profile, Job, Score
+    from jobradar.storage.models import Job, Profile, Score, User
     eng = _mem_engine()
     with Session(eng) as s:
         s.add(User(email="a@x.com", display_name="A"))
@@ -25,9 +25,10 @@ def test_schema_round_trip():
 
 
 def test_init_db_creates_tables(tmp_path):
-    from jobradar.storage.db import init_db, get_session
-    from jobradar.storage.models import User
     from sqlmodel import select
+
+    from jobradar.storage.db import get_session, init_db
+    from jobradar.storage.models import User
     db = tmp_path / "jobradar.db"
     init_db(db)
     with next(get_session(db)) as s:
@@ -37,9 +38,10 @@ def test_init_db_creates_tables(tmp_path):
 
 
 def test_profile_versioning():
+    from sqlmodel import select
+
     from jobradar.storage import repo
     from jobradar.storage.models import Profile
-    from sqlmodel import select
     eng = _mem_engine()
     with Session(eng) as s:
         repo.resolve_or_create_user(s, "a@x.com")
@@ -75,6 +77,7 @@ def test_score_scoping():
 
 def test_resolve_user_email():
     import pytest
+
     from jobradar.config import AppConfig, resolve_user_email
     cfg = AppConfig()
     cfg.user.email = "config@x.com"
@@ -87,12 +90,12 @@ def test_resolve_user_email():
 
 def test_pipeline_scopes_scores(tmp_path, monkeypatch):
     """Pipeline writes Score rows keyed on the active profile; skips re-scoring."""
-    from jobradar.config import AppConfig
-    from jobradar.storage.db import init_db, get_session
-    from jobradar.storage import repo
-    from jobradar.models.job import RawJob, ScoredJob, ScoreBreakdown
-    from jobradar.models.candidate import CandidateProfile
     import jobradar.pipeline as pl
+    from jobradar.config import AppConfig
+    from jobradar.models.candidate import CandidateProfile
+    from jobradar.models.job import RawJob, ScoreBreakdown, ScoredJob
+    from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
 
     db = tmp_path / "jobradar.db"
     init_db(db)
@@ -103,7 +106,8 @@ def test_pipeline_scopes_scores(tmp_path, monkeypatch):
 
     # Stub the expensive bits: LLM client, CV ingest, source fetch, scorer, generators.
     monkeypatch.setattr(pl, "LLMClient", lambda *a, **k: object())
-    prof = CandidateProfile(); prof.personal.name = "A"
+    prof = CandidateProfile()
+    prof.personal.name = "A"
     monkeypatch.setattr(pl, "ingest", lambda *a, **k: prof)
     monkeypatch.setattr(pl, "build_queries", lambda *a, **k: [])
     rj = RawJob(id="j1", title="Eng", company="Co", url="https://x/1", source="test")
@@ -125,10 +129,11 @@ def test_pipeline_scopes_scores(tmp_path, monkeypatch):
 
 def test_list_jobs_isolated(tmp_path):
     from fastapi.testclient import TestClient
-    from jobradar.config import AppConfig
+
     from jobradar.api.main import create_app
-    from jobradar.storage.db import init_db, get_session
+    from jobradar.config import AppConfig
     from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
     from jobradar.storage.models import Job, Score
 
     db = tmp_path / "jobradar.db"
@@ -158,8 +163,8 @@ def test_list_jobs_isolated(tmp_path):
 
 def test_apply_engine_scoped(tmp_path):
     from jobradar.apply.engine import run_apply
-    from jobradar.storage.db import init_db, get_session
     from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
     from jobradar.storage.models import Job, Score
 
     db = tmp_path / "jobradar.db"
@@ -187,8 +192,8 @@ def test_apply_engine_scoped(tmp_path):
 
 def test_report_scoped(tmp_path):
     from jobradar.report import generator
-    from jobradar.storage.db import init_db, get_session
     from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
     from jobradar.storage.models import Job, Score
 
     db = tmp_path / "jobradar.db"
@@ -218,8 +223,9 @@ def test_skill_requires_user(tmp_path, monkeypatch):
 
 
 def test_stepstone_ids_deterministic():
-    from jobradar.sources.adapters import stepstone
     from bs4 import BeautifulSoup
+
+    from jobradar.sources.adapters import stepstone
     html = '''<a href="/stellenangebote--Senior-Engineer-12345">Senior Engineer Role</a>'''
     jobs1 = stepstone._parse_page(BeautifulSoup(html, "html.parser"))
     jobs2 = stepstone._parse_page(BeautifulSoup(html, "html.parser"))

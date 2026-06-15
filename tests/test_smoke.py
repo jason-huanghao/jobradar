@@ -3,23 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-
 
 # ── 1. Module imports ─────────────────────────────────────────────
 
 def test_imports():
-    import jobradar.config
-    import jobradar.llm.env_probe
-    import jobradar.llm.client
-    import jobradar.models.candidate
-    import jobradar.models.job
-    import jobradar.profile.ingestor
-    import jobradar.sources.normalizer
-    import jobradar.scoring.hard_filter
-    import jobradar.interfaces.skill
-    import jobradar.interfaces.cli
+    pass
 
 
 # ── 2. Config defaults ────────────────────────────────────────────
@@ -49,8 +38,9 @@ def test_config_defaults():
 # ── 3. Config cv field resolution ────────────────────────────────
 
 def test_config_cv_override():
+    import tempfile
+
     from jobradar.config import load_config
-    import tempfile, os
     with tempfile.TemporaryDirectory() as tmpdir:
         cfg = load_config(Path(tmpdir) / "config.yaml", cv_override="https://example.com/cv.md")
         assert cfg.candidate.effective_cv() == "https://example.com/cv.md"
@@ -59,8 +49,8 @@ def test_config_cv_override():
 # ── 4. Normalizer + dedup ─────────────────────────────────────────
 
 def test_normalizer_dedup():
-    from jobradar.sources.normalizer import normalise, dedup
     from jobradar.models.job import RawJob
+    from jobradar.sources.normalizer import dedup, normalise
 
     def make_job(url: str) -> RawJob:
         return RawJob(
@@ -83,9 +73,9 @@ def test_normalizer_dedup():
 # ── 5. Hard filter ────────────────────────────────────────────────
 
 def test_hard_filter_drops_excluded():
-    from jobradar.scoring.hard_filter import apply as hard_filter
-    from jobradar.models.job import RawJob
     from jobradar.config import AppConfig
+    from jobradar.models.job import RawJob
+    from jobradar.scoring.hard_filter import apply as hard_filter
 
     cfg = AppConfig()
 
@@ -147,7 +137,7 @@ def test_skill_setup_cv_content(tmp_path, monkeypatch):
 
     from jobradar.interfaces.skill import run_skill
     cv_text = "# Jane Doe\nSoftware Engineer with Python and ML."
-    result = json.loads(run_skill("setup", json.dumps({"cv_content": cv_text})))
+    json.loads(run_skill("setup", json.dumps({"cv_content": cv_text})))  # must be valid JSON
 
     cv_file = tmp_path / "cv" / "cv_current.md"
     assert cv_file.exists()
@@ -218,9 +208,9 @@ def test_report_score_filter(tmp_path):
 
 
 def test_query_builder_max_results():
-    from jobradar.sources.query_builder import build_queries
     from jobradar.config import AppConfig
     from jobradar.models.candidate import CandidateProfile
+    from jobradar.sources.query_builder import build_queries
 
     cfg = AppConfig()
     cfg.search.max_results_per_source = 7
@@ -257,8 +247,8 @@ def test_apply_history(tmp_path):
 
 def test_apply_engine_dry_run(tmp_path):
     from jobradar.apply.engine import run_apply
-    from jobradar.storage.db import init_db, get_session
     from jobradar.storage import repo
+    from jobradar.storage.db import get_session, init_db
     from jobradar.storage.models import Job, Score
 
     db_path = tmp_path / "test.db"
@@ -283,7 +273,7 @@ def test_apply_engine_dry_run(tmp_path):
 # ── 14. Boss helper functions ─────────────────────────────────────
 
 def test_boss_helpers():
-    from jobradar.apply.boss import _is_inactive_hr, _format_greeting
+    from jobradar.apply.boss import _format_greeting, _is_inactive_hr
 
     assert _is_inactive_hr("3个月前活跃", 7) is True
     assert _is_inactive_hr("3天前活跃", 7) is False

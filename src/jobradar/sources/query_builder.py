@@ -117,8 +117,8 @@ def build_queries(
     kw_de = kw_de[:6]
     kw_cn = kw_cn[:6]
 
-    eu_locs = [l for l in locations if l.lower() not in _CN_LOCS]
-    cn_locs = [l for l in locations if l.lower() in _CN_LOCS] or (["上海"] if cn_on else [])
+    eu_locs = [loc for loc in locations if loc.lower() not in _CN_LOCS]
+    cn_locs = [loc for loc in locations if loc.lower() in _CN_LOCS] or (["上海"] if cn_on else [])
 
     queries: list[SearchQuery] = []
 

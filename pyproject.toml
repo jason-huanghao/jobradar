@@ -48,7 +48,8 @@ apply = ["playwright>=1.40.0"]
 # Web dashboard extras — WebSocket pipeline progress, async file serving
 web = ["aiofiles>=23.2.0", "websockets>=12.0"]
 # Development
-dev = ["ruff>=0.4.0", "pytest>=8.0", "pytest-asyncio>=0.23", "pytest-mock>=3.12"]
+# ruff pinned (~=) so the now-blocking CI lint gate can't break on a new ruff release.
+dev = ["ruff==0.15.*", "pytest>=8.0", "pytest-asyncio>=0.23", "pytest-mock>=3.12"]
 # Everything (note: playwright installed once, shared by cn + apply)
 all = ["openclaw-jobradar[cn,apply,web,dev]"]
 
@@ -64,6 +65,9 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
+# E501 (line length) intentionally not enforced: most violations are long HTML-template
+# strings, help text, and prompt strings where rewrapping is churn with no readability win.
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

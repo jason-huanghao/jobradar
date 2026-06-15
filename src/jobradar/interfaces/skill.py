@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
-import re
 import time
 from pathlib import Path
-from typing import Any
 
 import httpx
+
+from ..llm.catalog import CATALOG as _CATALOG
 
 _SERVER_PROC: subprocess.Popen | None = None
 
@@ -36,16 +37,10 @@ _ALL_KEY_VARS = [
     "OPENROUTER_API_KEY",
 ]
 
-# Provider table: (env_var, base_url, model)
-_PROVIDER_MAP = {
-    "OPENCLAW_API_KEY":   ("https://api.z.ai/v1",                            "claude-sonnet-4-20250514"),
-    "ARK_API_KEY":        ("https://ark.cn-beijing.volces.com/api/coding/v3", "doubao-seed-2.0-code"),
-    "ZAI_API_KEY":        ("https://api.z.ai/v1",                            "claude-sonnet-4-20250514"),
-    "OPENAI_API_KEY":     ("https://api.openai.com/v1",                       "gpt-4o-mini"),
-    "ANTHROPIC_API_KEY":  ("https://api.anthropic.com/v1",                    "claude-sonnet-4-20250514"),
-    "DEEPSEEK_API_KEY":   ("https://api.deepseek.com/v1",                     "deepseek-chat"),
-    "OPENROUTER_API_KEY": ("https://openrouter.ai/api/v1",                    "anthropic/claude-3-5-haiku"),
-}
+# Provider table: env_var -> (base_url, model). Derived from the curated catalog
+# (single source of truth), plus the OpenClaw runtime key which reuses the Z.AI proxy.
+_PROVIDER_MAP = {p.api_key_env: (p.base_url, p.default_model) for p in _CATALOG if p.api_key_env}
+_PROVIDER_MAP["OPENCLAW_API_KEY"] = ("https://api.z.ai/v1", "claude-sonnet-4-20250514")
 
 
 # Default: Germany-wide search — covers all major cities
@@ -111,7 +106,6 @@ def _detect_api_key() -> tuple[str | None, str | None, str | None]:
         if openclaw_profiles.exists():
             profiles = _json.loads(openclaw_profiles.read_text())
             for profile_name, profile in profiles.get("profiles", {}).items():
-                ptype = profile.get("type", "")
                 key_val = profile.get("key", "").strip()
                 if not key_val:
                     continue
@@ -336,7 +330,7 @@ def _handle_setup(params: dict) -> str:
             env_var, val = env_var.strip(), val.strip()
             env_file = project_dir / ".env"
             existing = env_file.read_text().splitlines() if env_file.exists() else []
-            lines = [l for l in existing if not l.startswith(env_var)]
+            lines = [ln for ln in existing if not ln.startswith(env_var)]
             lines.append(f"{env_var}={val}")
             env_file.write_text("\n".join(lines) + "\n")
             os.environ[env_var] = val
@@ -407,8 +401,8 @@ def _handle_setup(params: dict) -> str:
 
     # Locations
     if "locations" in params:
-        locs = [l.strip() for l in params["locations"].split(",") if l.strip()]
-        new_locs = "\n".join(f"    - {l}" for l in locs)
+        locs = [loc.strip() for loc in params["locations"].split(",") if loc.strip()]
+        new_locs = "\n".join(f"    - {loc}" for loc in locs)
         txt2 = cfg_path.read_text()
         txt2 = re.sub(r'locations:\s*\n(\s+-[^\n]*\n)+', f'locations:\n{new_locs}\n', txt2)
         cfg_path.write_text(txt2)
@@ -421,7 +415,7 @@ def _handle_setup(params: dict) -> str:
         current_loc_list = re.findall(r'    - (.+)', loc_block_m.group(1)) if loc_block_m else []
         # Apply defaults if empty or only has the placeholder "Germany"
         if not current_loc_list or current_loc_list == ["Germany"]:
-            new_locs = "\n".join(f"    - {l}" for l in _DEFAULT_LOCATIONS)
+            new_locs = "\n".join(f"    - {loc}" for loc in _DEFAULT_LOCATIONS)
             txt2 = re.sub(r'locations:\s*\n((?:    - [^\n]+\n)*)',
                           f'locations:\n{new_locs}\n', txt2)
             cfg_path.write_text(txt2)
@@ -589,7 +583,6 @@ class JobRadarSkill:
     def _get_report(self, p: dict) -> str:
         """Generate HTML report and optionally publish to GitHub Pages."""
         import json as _json
-        from pathlib import Path as _Path
         try:
             project_dir = _find_project_dir()
             from ..config import load_config
@@ -635,8 +628,8 @@ class JobRadarSkill:
         """Apply to top-scoring jobs. dry_run=True by default for safety."""
         import json as _json
         try:
-            from ..config import load_config
             from ..apply.engine import run_apply
+            from ..config import load_config
             cfg = load_config()
             db_path = cfg.resolve_path(cfg.server.db_path)
             from ..storage.db import get_session
@@ -692,12 +685,12 @@ def run_skill(tool_name: str, params_json: str | dict = "{}") -> str:
         # Identity gate — fires BEFORE the _is_configured() gate for tools that
         # operate on a specific user's data. Without a resolvable user email we
         # cannot scope reads/writes, so error out clearly.
-        IDENTITY_TOOLS = {
+        identity_tools = {
             "run_pipeline", "list_jobs", "get_job_detail",
             "generate_application", "get_digest", "get_report", "apply_jobs",
         }
         user_email = ""
-        if tool_name in IDENTITY_TOOLS:
+        if tool_name in identity_tools:
             from ..config import resolve_user_email
             try:
                 from ..config import load_config

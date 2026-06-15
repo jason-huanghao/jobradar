@@ -25,7 +25,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check src/ --select E,F,W --ignore E501 || true
+        run: ruff check src/ tests/
 
       - name: Test
         run: pytest tests/ -v

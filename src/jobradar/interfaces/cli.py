@@ -17,18 +17,11 @@ app = typer.Typer(name="jobradar", help="AI-powered job search agent", add_compl
                   context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 console = Console()
 
-# ── Supported LLM providers for init wizard ────────────────────────
-_PROVIDERS = [
-    # (display_name, env_var, base_url, default_model)
-    ("Volcengine Ark (doubao)",  "ARK_API_KEY",       "https://ark.cn-beijing.volces.com/api/coding/v3", "doubao-seed-2.0-code"),
-    ("Z.AI (Claude proxy)",      "ZAI_API_KEY",        "https://api.z.ai/v1",                            "claude-sonnet-4-20250514"),
-    ("OpenAI",                   "OPENAI_API_KEY",     "https://api.openai.com/v1",                       "gpt-4o-mini"),
-    ("DeepSeek",                 "DEEPSEEK_API_KEY",   "https://api.deepseek.com/v1",                     "deepseek-chat"),
-    ("OpenRouter",               "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1",                    "anthropic/claude-3-5-haiku"),
-    ("Anthropic",                "ANTHROPIC_API_KEY",  "https://api.anthropic.com/v1",                    "claude-sonnet-4-20250514"),
-    ("Ollama (local)",           "",                   "http://localhost:11434/v1",                        "llama3.1"),
-    ("LM Studio (local)",        "",                   "http://localhost:1234/v1",                         "loaded-model"),
-]
+# ── Supported LLM providers for init wizard (derived from the curated catalog) ──
+from ..llm.catalog import CATALOG as _CATALOG
+
+# (display_name, env_var, base_url, default_model) — wizard's expected tuple shape.
+_PROVIDERS = [(p.label, p.api_key_env, p.base_url, p.default_model) for p in _CATALOG]
 
 
 # ── jobradar init ──────────────────────────────────────────────────
@@ -692,6 +685,59 @@ def sources(
             (r["last_ok_at"] or "—")[:19].replace("T", " "),
         )
     console.print(table)
+
+
+# ── jobradar settings ──────────────────────────────────────────────
+
+@app.command()
+def settings(
+    config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
+    user: str = typer.Option("", "--user", help="User email (overrides config user.email)"),
+    test: bool = typer.Option(False, "--test", help="Ping the resolved LLM endpoint"),
+):
+    """Show the effective LLM endpoint (per-user override or config) and optionally test it."""
+    import os as _os
+
+    from ..config import load_config, resolve_user_email
+    from ..llm.connection import test_connection
+    from ..llm.resolver import resolve_endpoint
+    from ..storage.db import get_session, init_db
+    from ..storage.repo import get_user_settings
+
+    cfg = load_config(config)
+    try:
+        user_email = resolve_user_email(cfg, user or None)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+
+    db_path = cfg.resolve_path(cfg.server.db_path)
+    init_db(db_path)
+    with next(get_session(db_path)) as session:
+        overridden = get_user_settings(session, user_email) is not None
+        endpoint = resolve_endpoint(session, user_email, cfg)
+
+    has_key = bool(endpoint.api_key_env and _os.getenv(endpoint.api_key_env))
+    table = Table(show_header=False)
+    table.add_column(style="dim")
+    table.add_column(style="bold")
+    table.add_row("User", user_email)
+    table.add_row("Source", "per-user override" if overridden else "config.yaml")
+    table.add_row("Provider", endpoint.provider or "—")
+    table.add_row("Model", endpoint.model or "—")
+    table.add_row("Base URL", endpoint.base_url or "—")
+    table.add_row("API key env", endpoint.api_key_env or "(none / local)")
+    table.add_row("Key set?", "[green]yes[/green]" if has_key else "[yellow]no[/yellow]")
+    console.print(table)
+
+    if test:
+        console.print("[dim]Testing connection…[/dim]")
+        result = test_connection(endpoint)
+        if result.ok:
+            console.print(f"[green]✓ {result.message}[/green] ({result.latency_ms} ms)")
+        else:
+            console.print(f"[red]✗ {result.message}[/red]")
+            raise typer.Exit(1)
 
 
 # ── jobradar health ────────────────────────────────────────────────

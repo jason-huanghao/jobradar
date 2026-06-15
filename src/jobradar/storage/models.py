@@ -24,6 +24,22 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class UserSettings(SQLModel, table=True):
+    """Per-user LLM endpoint selection. Keyed by user.email.
+
+    Stores the *selection* (provider/model/base_url + the env-var name holding the
+    key) — never the secret key value, which stays in the environment/.env."""
+
+    __tablename__ = "user_settings"
+
+    user_email: str = Field(primary_key=True, foreign_key="user.email")
+    provider: str = ""          # catalog id, or "custom"
+    model: str = ""
+    base_url: str = ""
+    api_key_env: str = ""
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
 class Profile(SQLModel, table=True):
     """A versioned CV under a user. Exactly one is_active per user."""
 

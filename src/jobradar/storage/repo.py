@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 
 from ..scoring.freshness import is_expired
 from ..sources.health import SourceOutcome, status_is_failure
-from .models import Job, PipelineRun, Profile, Score, User
+from .models import Job, PipelineRun, Profile, Score, User, UserSettings
 
 
 def resolve_or_create_user(session: Session, email: str, display_name: str = "") -> User:
@@ -51,6 +51,30 @@ def get_active_profile(session: Session, user_email: str) -> Profile | None:
         select(Profile)
         .where(Profile.user_email == user_email, Profile.is_active == True)  # noqa: E712
     ).first()
+
+
+def get_user_settings(session: Session, user_email: str) -> UserSettings | None:
+    return session.get(UserSettings, user_email)
+
+
+def upsert_user_settings(
+    session: Session, user_email: str, *,
+    provider: str = "", model: str = "", base_url: str = "", api_key_env: str = "",
+) -> UserSettings:
+    """Create or update a user's LLM endpoint selection. Ensures the user exists."""
+    resolve_or_create_user(session, user_email)
+    row = session.get(UserSettings, user_email)
+    if row is None:
+        row = UserSettings(user_email=user_email)
+    row.provider = provider
+    row.model = model
+    row.base_url = base_url
+    row.api_key_env = api_key_env
+    row.updated_at = datetime.utcnow()
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
 
 
 def scored_job_ids(session: Session, profile_id: str) -> set[str]:

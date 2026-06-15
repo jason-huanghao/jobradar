@@ -60,6 +60,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     from .routers.outputs import router as outputs_router
     from .routers.pipeline import router as pipeline_router
     from .routers.profile import router as profile_router
+    from .routers.settings import router as settings_router
     from .routers.sources import router as sources_router
 
     app.include_router(profile_router,  prefix="/api/profile",  tags=["profile"])
@@ -68,6 +69,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(generate_router, prefix="/api/generate", tags=["generate"])
     app.include_router(outputs_router,  prefix="/api/outputs",  tags=["outputs"])
     app.include_router(sources_router,  prefix="/api/sources",  tags=["sources"])
+    app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
 
     # WebSocket
     from .ws import router as ws_router

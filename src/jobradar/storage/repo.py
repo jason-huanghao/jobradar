@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 
 from sqlmodel import Session, select
 
 from ..scoring.freshness import is_expired
-from .models import Job, Profile, Score, User
+from ..sources.health import SourceOutcome, status_is_failure
+from .models import Job, PipelineRun, Profile, Score, User
 
 
 def resolve_or_create_user(session: Session, email: str, display_name: str = "") -> User:
@@ -72,6 +74,49 @@ def list_scored(session: Session, profile_id: str, min_score: float = 0.0,
         query = query.where(Score.overall >= min_score)
     query = query.order_by(Score.overall.desc())
     return session.exec(query).all()
+
+
+def recent_source_health(session: Session, limit: int = 20) -> dict[str, dict]:
+    """Aggregate per-source health from the most recent pipeline runs.
+
+    Reads the last `limit` PipelineRun rows (newest first) and folds their
+    `sources_run` outcomes into, per source_id:
+        last_status, last_jobs, last_run_at, last_ok_at, consecutive_failures.
+    `consecutive_failures` counts error/blocked outcomes from the newest run
+    backwards until the first non-failure for that source."""
+    runs = session.exec(
+        select(PipelineRun).order_by(PipelineRun.started_at.desc()).limit(limit)
+    ).all()
+
+    health: dict[str, dict] = {}
+    streak_open: dict[str, bool] = {}   # still counting consecutive failures?
+
+    for run in runs:  # newest → oldest
+        try:
+            raw = json.loads(run.sources_run or "[]")
+        except (ValueError, TypeError):
+            continue
+        for d in raw:
+            o = SourceOutcome.from_dict(d)
+            sid = o.source_id
+            if sid not in health:
+                health[sid] = {
+                    "last_status": o.status,
+                    "last_jobs": o.jobs,
+                    "last_run_at": run.started_at,
+                    "last_ok_at": None,
+                    "consecutive_failures": 0,
+                }
+                streak_open[sid] = True
+            h = health[sid]
+            if h["last_ok_at"] is None and o.status == "ok":
+                h["last_ok_at"] = run.started_at
+            if streak_open[sid]:
+                if status_is_failure(o.status):
+                    h["consecutive_failures"] += 1
+                else:
+                    streak_open[sid] = False
+    return health
 
 
 def sweep_expired(session: Session, now: datetime, staleness_days: int) -> int:

@@ -7,8 +7,8 @@ No server required — the output file opens directly in any browser.
 from __future__ import annotations
 
 import hashlib
-import os
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any

@@ -77,7 +77,8 @@ class LinkedInApplier:
 
     def _do_apply(self, job: dict) -> ApplyResult:
         try:
-            from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+            from playwright.sync_api import TimeoutError as PWTimeout
+            from playwright.sync_api import sync_playwright
         except ImportError:
             raise RuntimeError(
                 "Playwright not installed. Run: pip install 'openclaw-jobradar[apply]' "

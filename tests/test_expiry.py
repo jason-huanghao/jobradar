@@ -195,6 +195,7 @@ def test_pipeline_exports_sweep_expired():
 # ── API hides expired by default ──────────────────────────────────
 def test_api_jobs_hides_expired(tmp_path):
     from fastapi.testclient import TestClient
+
     from jobradar.api.main import create_app
     from jobradar.config import AppConfig
     from jobradar.storage import repo

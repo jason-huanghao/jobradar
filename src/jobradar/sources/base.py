@@ -8,10 +8,22 @@ from datetime import datetime
 from ..models.job import RawJob
 
 
+class SourceError(Exception):
+    """Raised by an adapter on a hard, whole-source failure (HTTP non-200,
+    network error). Lets the registry distinguish a genuine failure from a
+    source that legitimately returned no matches. Set ``blocked=True`` when the
+    failure looks like an anti-bot block (HTTP 403/429)."""
+
+    def __init__(self, message: str, *, blocked: bool = False) -> None:
+        super().__init__(message)
+        self.blocked = blocked
+
+
 class JobSource(ABC):
     """Every adapter must implement this interface."""
 
     source_id: str = "base"
+    kind: str = "scraper"            # api | library | scraper — reliability taxonomy
 
     @abstractmethod
     def fetch(

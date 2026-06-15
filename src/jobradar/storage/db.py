@@ -17,6 +17,7 @@ from .models import (  # noqa: F401
     Profile,
     Score,
     User,
+    UserSettings,
 )
 
 _engines: dict[str, object] = {}

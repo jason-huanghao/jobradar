@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 
 from .config import AppConfig
 from .llm.client import LLMClient
+from .llm.resolver import resolve_endpoint
 from .models.job import RawJob, ScoredJob
 from .profile.ingestor import ingest
 from .scoring.freshness import compute_expires_at
@@ -60,10 +61,13 @@ class JobRadarPipeline:
     def __init__(self, config: AppConfig, user_email: str) -> None:
         self.config = config
         self.user_email = user_email
-        self.llm = LLMClient(config.llm.text)
         db_path = config.resolve_path(config.server.db_path)
         init_db(db_path)
         self._db_path = db_path
+        # Resolve the effective endpoint: per-user settings override config.
+        with next(get_session(db_path)) as session:
+            endpoint = resolve_endpoint(session, user_email, config)
+        self.llm = LLMClient(endpoint)
         self._registry = build_registry(config)
 
     def run(

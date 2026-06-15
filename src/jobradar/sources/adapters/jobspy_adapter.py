@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class JobSpySource(JobSource):
     source_id = "jobspy"
+    kind = "library"
 
     def is_enabled(self, config) -> bool:
         return getattr(config.sources.jobspy, "enabled", False)

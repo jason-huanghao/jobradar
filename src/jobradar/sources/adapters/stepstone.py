@@ -15,7 +15,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from ...models.job import RawJob, SearchQuery
-from ..base import JobSource
+from ..base import JobSource, SourceError
 from ..normalizer import make_id
 
 logger = logging.getLogger(__name__)
@@ -61,16 +61,21 @@ class StepstoneSource(JobSource):
                 resp = client.get(url, headers=_HEADERS, params=params)
                 if resp.status_code != 200:
                     logger.warning("StepStone returned %d for '%s'", resp.status_code, keyword)
-                    return []
+                    raise SourceError(
+                        f"HTTP {resp.status_code}",
+                        blocked=resp.status_code in (403, 429),
+                    )
                 all_jobs.extend(_parse_page(BeautifulSoup(resp.text, "html.parser")))
 
                 if len(all_jobs) < max_results:
                     resp2 = client.get(url, headers=_HEADERS, params={**params, "page": 2})
                     if resp2.status_code == 200:
                         all_jobs.extend(_parse_page(BeautifulSoup(resp2.text, "html.parser")))
+        except SourceError:
+            raise
         except Exception as e:
             logger.error("StepStone search failed for '%s': %s", keyword, e)
-            return []
+            raise SourceError(str(e)) from e
 
         logger.info("StepStone: %d jobs for '%s' in '%s'",
                     len(all_jobs), keyword, location or "Germany")

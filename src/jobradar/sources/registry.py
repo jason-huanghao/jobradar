@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from ..config import AppConfig
 from ..models.job import RawJob, SearchQuery
-from .base import JobSource
+from .base import JobSource, SourceError
+from .health import SourceOutcome, classify
 from .normalizer import dedup, normalise
 
 logger = logging.getLogger(__name__)
@@ -16,14 +18,46 @@ logger = logging.getLogger(__name__)
 _MAX_WORKERS = 6
 
 
+def _fetch_with_retries(
+    src: JobSource, qs: list[SearchQuery], since: datetime,
+    max_attempts: int, base_delay: float,
+) -> tuple[list[RawJob], Exception | None, int]:
+    """Call src.fetch, retrying only on transient SourceError. Returns
+    (jobs, last_error_or_None, attempts_used)."""
+    attempts = 0
+    last_error: Exception | None = None
+    for attempt in range(1, max(1, max_attempts) + 1):
+        attempts = attempt
+        try:
+            return src.fetch(qs, since), None, attempts
+        except SourceError as exc:
+            last_error = exc
+            if attempt < max_attempts:
+                time.sleep(base_delay * 2 ** (attempt - 1))
+                continue
+            return [], exc, attempts
+        except Exception as exc:  # non-transient: record once, no retry
+            return [], exc, attempts
+    return [], last_error, attempts
+
+
 class SourceRegistry:
-    """Holds all registered adapters. Run fetch_all() to crawl in parallel."""
+    """Holds all registered adapters. Run fetch_all() to crawl in parallel.
+
+    After each fetch_all, ``self.last_outcomes`` holds a SourceOutcome per
+    source that ran (used for health reporting / PipelineRun.sources_run)."""
 
     def __init__(self) -> None:
         self._sources: dict[str, JobSource] = {}
+        self.last_outcomes: list[SourceOutcome] = []
 
     def register(self, source: JobSource) -> None:
         self._sources[source.source_id] = source
+
+    @property
+    def sources(self) -> dict[str, JobSource]:
+        """All registered adapters, keyed by source_id (read-only copy)."""
+        return dict(self._sources)
 
     def fetch_all(
         self,
@@ -41,31 +75,49 @@ class SourceRegistry:
         enabled = {sid: src for sid, src in self._sources.items() if src.is_enabled(config)}
         if not enabled:
             logger.warning("No sources enabled — check config.yaml sources section")
+            self.last_outcomes = []
             return []
 
-        all_jobs: list[RawJob] = []
+        max_attempts = config.reliability.max_attempts
+        base_delay = config.reliability.retry_base_delay
 
-        def _run(source_id: str, src: JobSource) -> tuple[str, list[RawJob]]:
+        all_jobs: list[RawJob] = []
+        outcomes: list[SourceOutcome] = []
+
+        def _run(source_id: str, src: JobSource) -> tuple[SourceOutcome, list[RawJob]]:
             qs = by_source.get(source_id, [])
+            started = time.monotonic()
             if not qs:
-                return source_id, []
-            try:
-                jobs = src.fetch(qs, since)
-                return source_id, jobs
-            except Exception as exc:
-                logger.error("Source '%s' failed: %s", source_id, exc)
-                return source_id, []
+                return SourceOutcome(source_id, "empty", 0, 0), []
+            jobs, error, attempts = _fetch_with_retries(
+                src, qs, since, max_attempts, base_delay
+            )
+            duration_ms = int((time.monotonic() - started) * 1000)
+            if error is not None:
+                logger.error("Source '%s' failed: %s", source_id, error)
+            outcome = SourceOutcome(
+                source_id=source_id,
+                status=classify(len(jobs), error),
+                jobs=len(jobs),
+                duration_ms=duration_ms,
+                attempts=attempts,
+                error=str(error) if error else "",
+            )
+            return outcome, jobs
 
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
             futures = {pool.submit(_run, sid, src): sid for sid, src in enabled.items()}
             for future in as_completed(futures):
-                sid, jobs = future.result()
+                outcome, jobs = future.result()
                 normalised = [normalise(j) for j in jobs]
                 all_jobs.extend(normalised)
+                outcomes.append(outcome)
                 if on_source_done:
-                    on_source_done(sid, len(normalised))
-                logger.info("Source '%s': %d jobs", sid, len(normalised))
+                    on_source_done(outcome.source_id, len(normalised))
+                logger.info("Source '%s': %d jobs (%s)",
+                            outcome.source_id, len(normalised), outcome.status)
 
+        self.last_outcomes = outcomes
         result = dedup(all_jobs)
         logger.info("Total after dedup: %d jobs", len(result))
         return result

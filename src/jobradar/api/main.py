@@ -60,12 +60,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     from .routers.outputs import router as outputs_router
     from .routers.pipeline import router as pipeline_router
     from .routers.profile import router as profile_router
+    from .routers.sources import router as sources_router
 
     app.include_router(profile_router,  prefix="/api/profile",  tags=["profile"])
     app.include_router(jobs_router,     prefix="/api/jobs",     tags=["jobs"])
     app.include_router(pipeline_router, prefix="/api/pipeline", tags=["pipeline"])
     app.include_router(generate_router, prefix="/api/generate", tags=["generate"])
     app.include_router(outputs_router,  prefix="/api/outputs",  tags=["outputs"])
+    app.include_router(sources_router,  prefix="/api/sources",  tags=["sources"])
 
     # WebSocket
     from .ws import router as ws_router

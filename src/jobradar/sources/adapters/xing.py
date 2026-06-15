@@ -13,7 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from ...models.job import RawJob, SearchQuery
-from ..base import JobSource
+from ..base import JobSource, SourceError
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +58,21 @@ class XingSource(JobSource):
                 resp = client.get(url, headers=_HEADERS, params=base_params)
                 if resp.status_code != 200:
                     logger.warning("XING returned %d for '%s'", resp.status_code, keyword)
-                    return []
+                    raise SourceError(
+                        f"HTTP {resp.status_code}",
+                        blocked=resp.status_code in (403, 429),
+                    )
                 all_jobs.extend(_parse_page(BeautifulSoup(resp.text, "html.parser")))
 
                 if len(all_jobs) < max_results:
                     p2 = client.get(url, headers=_HEADERS, params={**base_params, "page": 2})
                     if p2.status_code == 200:
                         all_jobs.extend(_parse_page(BeautifulSoup(p2.text, "html.parser")))
+        except SourceError:
+            raise
         except Exception as e:
             logger.error("XING search failed for '%s': %s", keyword, e)
-            return []
+            raise SourceError(str(e)) from e
 
         # Deduplicate by URL
         seen: set[str] = set()

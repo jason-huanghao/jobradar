@@ -89,6 +89,9 @@ class JobRadarPipeline:
                 run_record.status = "done"
                 run_record.profile_id = getattr(self, "_profile_id", "")
                 run_record.finished_at = datetime.utcnow()
+                run_record.sources_run = json.dumps(
+                    [o.to_dict() for o in getattr(self._registry, "last_outcomes", [])]
+                )
                 run_record.jobs_fetched = result.jobs_fetched
                 run_record.jobs_new = result.jobs_new
                 run_record.jobs_scored = result.jobs_scored

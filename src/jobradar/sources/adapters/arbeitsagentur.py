@@ -27,6 +27,7 @@ _DETAIL_TIMEOUT = 10
 
 class ArbeitsagenturSource(JobSource):
     source_id = "arbeitsagentur"
+    kind = "api"
 
     def fetch(self, queries: list[SearchQuery], since: datetime) -> list[RawJob]:
         all_jobs: list[RawJob] = []

@@ -116,6 +116,12 @@ class SourcesConfig(BaseModel):
     zhilian: ZhilianConfig = Field(default_factory=ZhilianConfig)
 
 
+class ReliabilityConfig(BaseModel):
+    """Per-source fetch resilience knobs (used by the source registry)."""
+    max_attempts: int = 2            # total tries per source on transient SourceError
+    retry_base_delay: float = 0.5    # seconds; backoff = base * 2**(attempt-1)
+
+
 class ScoringConfig(BaseModel):
     min_score_digest: float = 6.0
     min_score_application: float = 7.0
@@ -151,6 +157,7 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     sources: SourcesConfig = Field(default_factory=SourcesConfig)
+    reliability: ReliabilityConfig = Field(default_factory=ReliabilityConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)

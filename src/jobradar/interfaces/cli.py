@@ -652,6 +652,48 @@ def sweep(
     console.print(f"[green]Swept {count} job(s) to expired.[/green]")
 
 
+# ── jobradar sources ───────────────────────────────────────────────
+
+@app.command()
+def sources(
+    config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yaml"),
+):
+    """Show each job source: kind, enabled, and recent reliability health."""
+    from ..config import load_config
+    from ..sources.report import source_report
+    from ..storage.db import get_session, init_db
+
+    cfg = load_config(config)
+    db_path = cfg.resolve_path(cfg.server.db_path)
+    init_db(db_path)
+    with next(get_session(db_path)) as session:
+        rows = source_report(session, cfg)
+
+    table = Table(title="Job sources")
+    table.add_column("Source", style="bold")
+    table.add_column("Kind", style="cyan")
+    table.add_column("Enabled")
+    table.add_column("Last status")
+    table.add_column("Jobs", justify="right")
+    table.add_column("Fails", justify="right")
+    table.add_column("Last OK")
+    for r in rows:
+        status = r["last_status"] or "—"
+        status_style = {"ok": "green", "empty": "yellow",
+                        "error": "red", "blocked": "red"}.get(status, "dim")
+        fails = r["consecutive_failures"]
+        table.add_row(
+            r["source_id"],
+            r["kind"],
+            "[green]yes[/green]" if r["enabled"] else "[dim]no[/dim]",
+            f"[{status_style}]{status}[/{status_style}]",
+            "—" if r["last_jobs"] is None else str(r["last_jobs"]),
+            f"[red]{fails}[/red]" if fails else "0",
+            (r["last_ok_at"] or "—")[:19].replace("T", " "),
+        )
+    console.print(table)
+
+
 # ── jobradar health ────────────────────────────────────────────────
 
 @app.command()

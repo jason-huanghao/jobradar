@@ -12,7 +12,6 @@ from datetime import datetime
 
 import httpx
 
-from ...config import AppConfig
 from ...models.job import RawJob, SearchQuery
 from ..base import JobSource
 

@@ -10,19 +10,29 @@
 #   cv: /Users/you/Documents/resume.pdf
 
 candidate:
-  cv: ""   # ← fill this in, or run: jobradar run --cv <path-or-url>
+  cv: ""   # ← fill this in, or run: jobradar update --cv <path-or-url>
+
+# Identity — owns your profile, scores, and per-user LLM settings.
+# Required before fetch/score/report/apply. Set here, or pass --user on the CLI.
+user:
+  email: ""   # e.g. you@example.com
 
 # ── Optional overrides (defaults shown) ───────────────────────────────────────
 
 # search:
 #   locations: []           # empty = worldwide; e.g. [Berlin, Hamburg, Remote]
 #   max_results: 20         # jobs per source per query
-#   max_days_old: 14
+#   max_days_old: 14        # posting TTL — older postings count as expired
+#   staleness_days: 7       # not re-seen in N days -> expired (hidden by `sweep`)
 #   exclude_keywords:       # drop titles matching these (case-insensitive)
 #     - Praktikum
 #     - Werkstudent
 #     - Ausbildung
 #     - internship
+
+# reliability:              # per-source fetch resilience (used by the source registry)
+#   max_attempts: 2         # total tries per source on transient SourceError
+#   retry_base_delay: 0.5   # seconds; backoff = base * 2**(attempt-1)
 
 # scoring:
 #   min_score: 6.0            # minimum score to appear in digest/report

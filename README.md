@@ -21,7 +21,7 @@
 
 ---
 
-> **JobRadar** reads your CV, searches **7 job platforms** across Germany and China in parallel, uses an LLM to score each role on 6 dimensions, generates tailored cover letters and CV sections, and can **auto-apply** to top matches on BOSS直聘 and LinkedIn — fully automated.
+> **JobRadar** reads your CV, searches **7 job platforms** across Germany and China in parallel, uses an LLM to score each role on 6 dimensions, generates tailored cover letters and CV sections, and can **auto-apply** to top matches on BOSS直聘 and LinkedIn — fully automated. Multi-user by design: each user's CV, scores, and LLM settings are scoped to their own profile.
 
 ---
 
@@ -83,6 +83,10 @@ The agent runs `setup` → scrapes 36+ jobs → scores with AI → publishes HTM
 | 🌐 **Web dashboard** | FastAPI UI — browse jobs, generate applications, download Excel |
 | ⚡ **Incremental by design** | Only scores new jobs — daily updates finish in minutes |
 | 🧠 **Learns from your feedback** | `jobradar apply --dry-run` previews; scoring adapts to your profile |
+| 👥 **Multi-user** | Identity by `user.email`; CV is a versioned profile, scores keyed per profile — pass `--user` to scope any command |
+| ⏳ **Expiry & freshness** | Tracks deadlines + posting age; `jobradar sweep` hides stale/expired jobs from reports & apply |
+| 📡 **Source health signals** | `jobradar sources` shows per-source kind, status (ok/empty/error/blocked) and recent reliability; fetches retry on transient failure |
+| ⚙️ **Per-user LLM settings** | `jobradar settings` shows/tests the effective endpoint; per-user override stored in DB (key name only, never the secret) |
 
 ---
 
@@ -101,6 +105,9 @@ Your CV (Markdown / PDF / DOCX / URL)
 │              Arbeitsagentur · Indeed · Glassdoor    │
 │              Google Jobs · StepStone · XING  (DE)  │
 │              BOSS直聘 · 拉勾网 · 智联招聘  (CN)     │
+├─────────────────────────────────────────────────────┤
+│ 0  SWEEP     Flag stale / past-deadline jobs as     │
+│              expired (hidden from reports & apply)   │
 ├─────────────────────────────────────────────────────┤
 │ 3  FILTER    Dedup by URL · Drop internships/noise  │
 │              (free pre-filter — saves LLM tokens)   │
@@ -158,11 +165,17 @@ jobradar init
 ### First run
 ```bash
 export OPENAI_API_KEY=sk-…          # or ARK_API_KEY, DEEPSEEK_API_KEY, etc.
+jobradar init --email you@example.com  # identity — owns your profile & settings
 jobradar health                     # verify LLM + CV
-jobradar run --mode quick           # ~3 min fast test
-jobradar run                        # full run (all sources)
+jobradar update --mode quick        # ~3 min fast test  (alias: jobradar run)
+jobradar update                     # full run (all sources)
 jobradar install-agent              # daily 08:00 automation (macOS)
 ```
+
+> **Identity:** every command resolves a user from `--user`, then `user.email` in
+> `config.yaml`. Your CV becomes a versioned **profile** under that user, and scores
+> are keyed per profile — so multiple people can share one install without blending
+> results. With a single user, set it once in `init` and omit `--user` thereafter.
 
 ---
 
@@ -257,14 +270,22 @@ cp config.example.yaml config.yaml   # never commit this file
 ```
 
 ```yaml
+user:
+  email: you@example.com             # identity — owns your profile, scores & LLM settings
+
 candidate:
   cv: "./cv/cv_current.md"           # .md, .pdf, .docx, or URL
 
 search:
   locations: ["Berlin", "Hamburg", "Remote"]
-  max_days_old: 14
+  max_days_old: 14                   # posting TTL — older postings count as expired
+  staleness_days: 7                  # not seen in N days → expired (sweep hides it)
   exclude_keywords: ["Praktikum", "Werkstudent", "internship"]
   exclude_companies: ["MyFormerEmployer"]
+
+reliability:
+  max_attempts: 2                    # total tries per source on transient failure
+  retry_base_delay: 0.5              # seconds; backoff = base * 2**(attempt-1)
 
 scoring:
   min_score_digest: 6.0              # digest threshold
@@ -287,20 +308,31 @@ Full annotated reference: [`config.example.yaml`](config.example.yaml)
 
 ## 🖥️ CLI Reference
 
+Every command that reads or writes per-user data accepts `--user EMAIL`. Omit it to
+fall back to `user.email` in `config.yaml`.
+
 ```bash
 # ── Setup ─────────────────────────────────────────────────────────
-jobradar init [--cv PATH_OR_URL] [--api-key ENV=val] [--locations "X,Y"] [-y]
+jobradar init [--cv PATH_OR_URL] [--email YOU] [--api-key ENV=val] [--locations "X,Y"] [-y]
+jobradar setup                     # non-interactive: copy config.example.yaml → config.yaml
 jobradar health                    # LLM ping + CV file check
 jobradar status                    # DB stats (job count, scored count)
-jobradar install-agent             # macOS launchd: daily at 08:00
+jobradar install-agent             # macOS launchd: daily `update --mode quick` at 08:00
 
-# ── Pipeline ──────────────────────────────────────────────────────
-jobradar run                       # full run (all sources + score + generate)
-jobradar run --mode quick          # fast test: Arbeitsagentur + Indeed, ~3 min
-jobradar run --mode dry-run        # validate config, no network calls
-jobradar run --mode score-only     # skip fetching, re-score existing jobs
-jobradar run --cv PATH_OR_URL      # override CV for this run
-jobradar run --limit 5             # cap results per source (useful for testing)
+# ── Pipeline (run is an alias for update) ─────────────────────────
+jobradar update                    # full run (sweep + fetch + score + generate)
+jobradar update --mode quick       # fast test: fewer sources, ~3 min
+jobradar update --mode dry-run     # validate config, no network calls
+jobradar update --mode score-only  # skip fetching, re-score existing jobs
+jobradar update --cv PATH_OR_URL   # override CV for this run
+jobradar update --limit 5          # cap results per source (useful for testing)
+jobradar update --user you@x.com   # scope to a specific user's profile
+
+# ── Maintenance & introspection ───────────────────────────────────
+jobradar sweep                     # flag stale / past-deadline jobs as expired
+jobradar sources                   # per-source kind, enabled, recent reliability health
+jobradar settings                  # show effective LLM endpoint (per-user override or config)
+jobradar settings --test           # also ping the resolved endpoint
 
 # ── Report ────────────────────────────────────────────────────────
 jobradar report                    # generate HTML + open in browser
@@ -371,34 +403,43 @@ jobradar apply --auto --min-score 8 # live apply, best matches only
 ```
 jobradar/
 ├── src/jobradar/
-│   ├── sources/adapters/     # Job board scrapers (all 7 implemented)
-│   │   ├── arbeitsagentur.py
-│   │   ├── jobspy_adapter.py  # Indeed + Glassdoor + Google Jobs
-│   │   ├── stepstone.py
-│   │   ├── xing.py
-│   │   ├── bosszhipin.py      # cookie-based API + Playwright capture
-│   │   ├── lagou.py           # mobile API → AJAX → Playwright
-│   │   └── zhilian.py         # REST API → Playwright fallback
+│   ├── sources/
+│   │   ├── adapters/          # Job board scrapers (all 7 implemented)
+│   │   │   ├── arbeitsagentur.py
+│   │   │   ├── jobspy_adapter.py  # Indeed + Glassdoor + Google Jobs
+│   │   │   ├── stepstone.py / xing.py
+│   │   │   ├── bosszhipin.py      # cookie-based API + Playwright capture
+│   │   │   ├── lagou.py / zhilian.py
+│   │   ├── registry.py        # parallel fetch + retry + per-source outcomes
+│   │   ├── health.py          # SourceOutcome / classify: ok·empty·error·blocked
+│   │   └── report.py          # source × health join for `jobradar sources`
 │   ├── scoring/
 │   │   ├── scorer.py          # 6-dimension LLM scoring (batched)
-│   │   └── generator/
-│   │       ├── cover_letter.py  # tailored cover letter per job
-│   │       └── cv_optimizer.py  # tailored CV section per job
-│   ├── apply/                 # Auto-apply engine (Playwright)
-│   │   ├── engine.py
-│   │   ├── boss.py            # BOSS直聘 Playwright greet
-│   │   └── linkedin.py        # LinkedIn Easy Apply
-│   ├── report/
-│   │   ├── generator.py       # self-contained HTML report
-│   │   └── publisher.py       # GitHub Pages deployment
-│   ├── api/                   # FastAPI web dashboard
+│   │   ├── hard_filter.py     # free pre-filter (keywords, internships)
+│   │   ├── freshness.py       # single source of truth for expiry date math
+│   │   └── generator/         # cover_letter.py + cv_optimizer.py (per job)
+│   ├── storage/               # SQLModel + Alembic (six-table schema)
+│   │   ├── models.py          # User · Profile · Job · Score · Application · PipelineRun · UserSettings
+│   │   ├── db.py              # engine + init_db (runs migrations to head)
+│   │   └── repo.py            # user/profile resolution, list_scored, sweep_expired, settings
+│   ├── llm/
+│   │   ├── catalog.py         # curated provider catalog (single source of truth)
+│   │   ├── resolver.py        # per-user endpoint override > config
+│   │   ├── connection.py      # test_connection → ConnectionResult
+│   │   ├── client.py          # OpenAI-compatible client
+│   │   └── env_probe.py       # detect endpoint from env / OAuth / OpenClaw
+│   ├── apply/                 # Auto-apply engine (Playwright): engine·boss·linkedin·history
+│   ├── report/                # generator.py (HTML) + publisher.py (GitHub Pages)
+│   ├── api/                   # FastAPI dashboard — routers/ + deps.py (per-user DI) + ws.py
 │   ├── interfaces/
-│   │   ├── cli.py             # Typer CLI
+│   │   ├── cli.py             # Typer CLI (update/run/sweep/sources/settings/report/apply/…)
 │   │   └── skill.py           # OpenClaw skill entry point
-│   └── config.py              # all paths relative to install dir
+│   ├── pipeline.py            # JobRadarPipeline(config, user_email) orchestrator
+│   └── config.py              # AppConfig — every field defaults; user.email required
+├── migrations/                # Alembic: 0001_initial, 0002_user_settings
 ├── SKILL.md                   # OpenClaw skill manifest
 ├── jobradar-skill             # bash wrapper (auto-loads .env)
-└── tests/                     # 14/14 passing
+└── tests/                     # 83 passing — foundation·expiry·source_reliability·settings·cleanup·smoke
 ```
 
 ---
@@ -416,6 +457,12 @@ jobradar/
 - [x] Excel export (colour-coded, via web dashboard + API)
 - [x] OpenClaw zero-config (API key from auth-profiles, no YAML needed)
 - [x] Web dashboard (FastAPI, job browsing + application generation)
+- [x] Multi-user model — `user.email` identity, versioned profiles, per-profile scores
+- [x] Alembic migrations + clean six-table schema
+- [x] Expiry & freshness — deadline/posting-age tracking + `jobradar sweep`
+- [x] Source reliability — per-source health signals + retries (`jobradar sources`)
+- [x] Per-user LLM settings + endpoint test (`jobradar settings`, `/api/settings`)
+- [ ] Hardened Playwright browser crawler (deferred — instrument-first; see source health data)
 - [ ] 前程无忧 (51job) CN source
 - [ ] Daily digest push to Telegram / email
 - [ ] MCP server mode (`jobradar serve`)
@@ -431,8 +478,14 @@ Contributions welcome — especially source adapters and test coverage.
 ```bash
 git clone https://github.com/jason-huanghao/jobradar.git
 pip install -e ".[dev]"
-ruff check src/ && pytest tests/ -v
+ruff check src/ tests/ && pytest tests/ -v   # both gates are enforced in CI
 ```
+
+> CI runs on Python 3.11 + 3.12. The `ruff check src/ tests/` lint gate is **blocking**
+> (E501 line-length is globally ignored; ruff is pinned to `0.15.*` for reproducibility).
+> The DB schema is managed by Alembic — `init_db()` upgrades to head, so a fresh
+> checkout creates the six-table schema (+ `user_settings`, + `alembic_version`)
+> with no manual steps.
 
 ---
 

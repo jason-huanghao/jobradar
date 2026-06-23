@@ -29,6 +29,8 @@ class LLMEndpoint(BaseModel):
     temperature: float = 0.1
     max_tokens: int = 4096
     rate_limit_delay: float = 1.0
+    # Extra HTTP headers for the OpenAI client (overrides catalog defaults).
+    default_headers: dict[str, str] = Field(default_factory=dict)
 
     @property
     def api_key(self) -> str:

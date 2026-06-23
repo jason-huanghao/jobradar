@@ -28,11 +28,25 @@ class LLMClient:
     """
 
     def __init__(self, endpoint: LLMEndpoint) -> None:
+        from .catalog import get_provider
+
         self.endpoint = endpoint
+        self._provider = get_provider(endpoint.provider)
         self._client = OpenAI(
             api_key=endpoint.api_key or "no-key",
             base_url=endpoint.base_url,
+            default_headers=_resolve_headers(endpoint) or None,
         )
+
+    @property
+    def supports_json_mode(self) -> bool:
+        """Whether the active provider accepts response_format=json_object.
+
+        Reasoning models (e.g. Kimi) emit nothing in plain mode — the token
+        budget is spent on hidden reasoning — so JSON mode is required to get
+        structured output back. Defaults to True for unknown providers.
+        """
+        return self._provider is None or self._provider.supports_json_mode
 
     def complete(
         self,
@@ -49,10 +63,15 @@ class LLMClient:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
+        resolved_temp = temperature if temperature is not None else self.endpoint.temperature
+        if self._provider is not None and self._provider.forced_temperature is not None:
+            # Model rejects any temperature but its fixed value (e.g. Kimi → 1).
+            resolved_temp = self._provider.forced_temperature
+
         kwargs: dict[str, Any] = {
             "model": self.endpoint.model,
             "messages": messages,
-            "temperature": temperature if temperature is not None else self.endpoint.temperature,
+            "temperature": resolved_temp,
             "max_tokens": max_tokens or self.endpoint.max_tokens,
         }
         if json_mode:
@@ -129,6 +148,22 @@ class LLMClient:
                 time.sleep(self.endpoint.rate_limit_delay)
             results.append(self.complete(prompt, system=system, temperature=temperature))
         return results
+
+
+def _resolve_headers(endpoint: LLMEndpoint) -> dict[str, str]:
+    """Merge provider-catalog default headers with endpoint overrides.
+
+    Some coding endpoints (e.g. Kimi) expect a client User-Agent. The catalog is
+    the source of truth per provider; explicit endpoint headers take precedence.
+    """
+    from .catalog import get_provider
+
+    headers: dict[str, str] = {}
+    provider = get_provider(endpoint.provider)
+    if provider is not None:
+        headers.update(provider.default_headers)
+    headers.update(endpoint.default_headers or {})
+    return headers
 
 
 def _parse_json(text: str) -> dict | list:

@@ -126,7 +126,8 @@ def extract_profile(
 
     try:
         raw_text = llm.complete(prompt, temperature=0.1,
-                                max_tokens=max(original_max_tokens, 8192))
+                                max_tokens=max(original_max_tokens, 8192),
+                                json_mode=llm.supports_json_mode)
         try:
             clean = re.sub(r'^```(?:json)?\s*', '', raw_text.strip())
             clean = re.sub(r'\s*```$', '', clean)

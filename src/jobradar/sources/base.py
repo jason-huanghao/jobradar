@@ -42,3 +42,12 @@ class JobSource(ABC):
     def is_enabled(self, config) -> bool:  # config: AppConfig
         src = getattr(config.sources, self.source_id, None)
         return bool(src and getattr(src, "enabled", False))
+
+    def fetch_detail(self, job: RawJob) -> str:
+        """Fetch a richer description for a single job from its detail page.
+
+        Default: no enrichment available (returns ""). Scrapers whose list pages
+        omit the description override this to fetch ``job.url`` and extract it.
+        Must be best-effort: return "" on any failure, never raise.
+        """
+        return ""

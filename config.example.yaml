@@ -24,6 +24,8 @@ user:
 #   max_results: 20         # jobs per source per query
 #   max_days_old: 14        # posting TTL — older postings count as expired
 #   staleness_days: 7       # not re-seen in N days -> expired (hidden by `sweep`)
+#   enrich_descriptions: true  # fetch detail pages to fill missing job descriptions
+#   enrich_max: 40          # cap detail fetches per run (they are slow)
 #   exclude_keywords:       # drop titles matching these (case-insensitive)
 #     - Praktikum
 #     - Werkstudent
@@ -37,6 +39,7 @@ user:
 # scoring:
 #   min_score: 6.0            # minimum score to appear in digest/report
 #   auto_apply_min_score: 7.5 # auto-apply above this (requires jobradar[apply])
+#   max_desc_chars: 2000      # per-job description budget sent to the LLM scorer
 
 # sources:
 #   # EU sources are ON by default (no extra setup needed)

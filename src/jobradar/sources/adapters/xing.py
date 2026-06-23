@@ -14,6 +14,8 @@ from bs4 import BeautifulSoup
 
 from ...models.job import RawJob, SearchQuery
 from ..base import JobSource, SourceError
+from ..detail import extract_jsonld_description
+from ..normalizer import make_id
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,21 @@ class XingSource(JobSource):
                     seen.add(j.id)
                     all_jobs.append(j)
         return all_jobs
+
+    def fetch_detail(self, job: RawJob) -> str:
+        """XING list pages omit the description; the job page exposes it as
+        JSON-LD. Best-effort: return "" on any failure."""
+        if not (job.url or "").startswith("http"):
+            return ""
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                resp = client.get(job.url, headers=_HEADERS)
+            if resp.status_code != 200:
+                return ""
+            return extract_jsonld_description(resp.text)
+        except Exception as e:
+            logger.debug("XING detail fetch failed for %s: %s", job.url, e)
+            return ""
 
     def _search(self, query: SearchQuery) -> list[RawJob]:
         max_results = query.extra.get("max_results", 50)
@@ -132,7 +149,7 @@ def _parse_page(soup: BeautifulSoup) -> list[RawJob]:
         title = link.get_text(strip=True)
         if len(title) >= _MIN_TITLE_LEN:
             jobs.append(RawJob(
-                id=f"xing-{abs(hash(full_url)) % 10**8}",
+                id=make_id("xing", full_url, title),
                 title=title, company="", location="",
                 url=full_url, description="", source="xing",
             ))
@@ -154,7 +171,7 @@ def _parse_jsonld(data) -> RawJob | None:
         location = (loc[0].get("address") or {}).get("addressLocality", "")
     url = data.get("url", "")
     return RawJob(
-        id=f"xing-{abs(hash(url)) % 10**8}",
+        id=make_id("xing", url, title, company),
         title=title, company=company, location=location, url=url,
         description=(data.get("description") or "")[:500],
         source="xing",
@@ -181,7 +198,7 @@ def _parse_card(card) -> RawJob | None:
             elif "location" in cls.lower():
                 location = text
         return RawJob(
-            id=f"xing-{abs(hash(job_url)) % 10**8}",
+            id=make_id("xing", job_url, title, company),
             title=title, company=company, location=location,
             url=job_url, description="", source="xing",
         )

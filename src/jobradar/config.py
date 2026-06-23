@@ -68,6 +68,10 @@ class SearchConfig(BaseModel):
     max_days_old: int = 14
     staleness_days: int = 7          # not re-seen in N days -> expired
     quick_max_results: int = 5
+    # Detail-page description enrichment: many scrapers (XING, StepStone) omit the
+    # description from list pages, so the LLM scorer would otherwise see title only.
+    enrich_descriptions: bool = True
+    enrich_max: int = 40             # cap detail fetches per run (they are slow)
     job_types: list[str] = Field(default_factory=lambda: ["fulltime"])
     custom_keywords: list[str] = Field(default_factory=list)
     exclude_keywords: list[str] = Field(
@@ -129,6 +133,7 @@ class ScoringConfig(BaseModel):
     min_score_application: float = 7.0
     auto_apply_min_score: float = 7.5
     batch_size: int = 5
+    max_desc_chars: int = 2000       # per-job description budget sent to the LLM
     dimensions: list[str] = Field(
         default_factory=lambda: [
             "skills_match", "seniority_fit", "location_fit",

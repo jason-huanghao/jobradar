@@ -32,6 +32,12 @@ class JobSpySource(JobSource):
             board   = query.extra.get("board", "indeed")
             country = query.extra.get("country", "germany")
             max_r   = query.extra.get("max_results", 50)
+            # LinkedIn omits the description from search results unless explicitly
+            # asked — without it the scorer only sees the title. The extra detail
+            # fetch is slower but the description is essential for scoring quality.
+            extra_kwargs: dict = {}
+            if board == "linkedin":
+                extra_kwargs["linkedin_fetch_description"] = True
             try:
                 df = scrape_jobs(
                     site_name=[board],
@@ -41,6 +47,7 @@ class JobSpySource(JobSource):
                     results_wanted=max_r,
                     hours_old=days_old * 24,
                     is_remote=query.location == "Remote",
+                    **extra_kwargs,
                 )
             except Exception as e:
                 logger.error("JobSpy [%s] '%s': %s", board, query.keyword, e)

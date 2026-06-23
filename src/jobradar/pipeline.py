@@ -193,11 +193,28 @@ class JobRadarPipeline:
         # Step 6: LLM scoring (skip already-scored jobs for THIS profile)
         already = scored_job_ids(session, self._profile_id)
         unscored = [j for j in to_score if j.id not in already]
+
+        # Step 6a: enrich thin descriptions from detail pages before scoring —
+        # otherwise scraper jobs (XING/StepStone) are scored on title only.
+        if cfg.search.enrich_descriptions and mode != "score-only":
+            enriched = self._registry.enrich_descriptions(
+                unscored, cap=cfg.search.enrich_max
+            )
+            if enriched:
+                for j in unscored:
+                    row = session.get(Job, j.id)
+                    if row is not None and (row.description or "") != j.description:
+                        row.description = j.description
+                        session.add(row)
+                session.commit()
+            emit("enrich_done", enriched=enriched)
+
         emit("scoring_start", total=len(unscored))
 
         scored_jobs = score_jobs(
             unscored, profile, self.llm,
             batch_size=cfg.scoring.batch_size,
+            max_desc_chars=cfg.scoring.max_desc_chars,
             on_batch_done=lambda s: emit("score_progress", scored=len(s)),
         )
         for sj in scored_jobs:

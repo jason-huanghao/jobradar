@@ -1,15 +1,42 @@
 # JobRadar — Project Context for Continuation Sessions
 
-> **Read this first in any new session.** Last updated 2026-06-21.
+> **Read this first in any new session.** Last updated 2026-06-23.
+
+---
+
+## ⚡ Active work — source data-quality (branch `improve/source-data-quality`, UNCOMMITTED)
+
+Fixing "scored jobs don't match my CV". **Root cause: source data quality, not scoring.**
+All sources fetch relevant jobs *by title*, but only `jobspy:indeed` returned
+descriptions; `xing`/`stepstone`/`jobspy:linkedin` returned empty descriptions, so the
+LLM scored them on title alone → noise. Fixes (95 tests green, ruff clean, verified live
+with the Kimi LLM and the test CV):
+
+1. Scorer description budget 400 → 2000 (config `scoring.max_desc_chars`); removed the
+   hidden `[:400]` cap in `llm/prompts/job_score.jinja2`.
+2. `jobspy_adapter` passes `linkedin_fetch_description=True` for linkedin.
+3. `stepstone._parse_article` now extracts the **job** URL (was grabbing the `/cmp/`
+   company page → broken links).
+4. `xing` uses deterministic `make_id` (was process-salted `hash()`).
+5. **Description enrichment**: `sources/detail.py` + `JobSource.fetch_detail()` (xing,
+   stepstone) + `SourceRegistry.enrich_descriptions(cap)` + pipeline Step 6a. Config:
+   `search.enrich_descriptions=True`, `search.enrich_max=40`. Coverage went indeed-only →
+   all 4 sources. Full diagnosis + per-file detail: memory `jobradar-source-quality.md`.
+
+**⚠️ Commit carefully:** the working tree also holds the user's *uncommitted Kimi LLM
+work* (`llm/client.py`, `llm/catalog.py`, `llm/env_probe.py`, `profile/extractor.py`, and
+a `default_headers` field in `config.py`) that rode along when the branch was created. Do
+NOT bundle it into the source-quality commit — stage only the source-quality files +
+my `config.py` hunks (enrich_descriptions/enrich_max/max_desc_chars).
 
 ---
 
 ## TL;DR — where things stand
 
 The **5-sub-project foundation refactor is COMPLETE and MERGED to `main`.**
-Working tree is clean, `main` is at `41be517`. **83 tests pass, ruff-clean, CI lint
-gate is blocking.** There is no open branch to finish. Remaining work is the deferred
-items in the Roadmap / "Open follow-ups" below.
+`main` is at `bd5ecd0` (docs) on top of `41be517`. **95 tests pass on the active branch,
+ruff-clean, CI lint gate is blocking.** Remaining work is the active source-quality branch
+above plus the deferred items in "Open follow-ups" below.
 
 Verified working on 2026-06-21:
 - `pytest tests/` → **83 passed**

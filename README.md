@@ -280,6 +280,8 @@ search:
   locations: ["Berlin", "Hamburg", "Remote"]
   max_days_old: 14                   # posting TTL — older postings count as expired
   staleness_days: 7                  # not seen in N days → expired (sweep hides it)
+  enrich_descriptions: true          # fetch detail pages to fill missing JD text
+  enrich_max: 40                     # cap detail fetches per run (they are slow)
   exclude_keywords: ["Praktikum", "Werkstudent", "internship"]
   exclude_companies: ["MyFormerEmployer"]
 
@@ -291,6 +293,7 @@ scoring:
   min_score_digest: 6.0              # digest threshold
   min_score_application: 7.0         # cover letter + CV section generated
   auto_apply_min_score: 7.5          # threshold for jobradar apply
+  max_desc_chars: 2000               # per-job description budget sent to the LLM scorer
 
 sources:
   bosszhipin: { enabled: false }     # set true after cookie setup + pip install -e ".[cn]"

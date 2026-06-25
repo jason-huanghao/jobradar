@@ -122,6 +122,49 @@ class SourceRegistry:
         logger.info("Total after dedup: %d jobs", len(result))
         return result
 
+    def enrich_descriptions(
+        self, jobs: list[RawJob], cap: int, min_len: int = 120
+    ) -> int:
+        """Fill missing descriptions in-place by fetching detail pages.
+
+        Only targets jobs whose description is shorter than ``min_len`` and that
+        have an absolute URL, capped at ``cap`` detail fetches (descriptions are
+        the LLM scorer's main signal, but detail fetches are slow / rate-limited).
+        Best-effort: a source that has no ``fetch_detail`` override or that errors
+        simply leaves the job untouched. Returns the number of jobs enriched.
+        """
+        targets = [
+            j for j in jobs
+            if len((j.description or "").strip()) < min_len
+            and (j.url or "").startswith("http")
+        ][:cap]
+        if not targets:
+            return 0
+
+        by_id = {j.id: j for j in targets}
+
+        def _one(j: RawJob) -> tuple[str, str]:
+            src = self._sources.get(j.source.split(":")[0])
+            if src is None:
+                return j.id, ""
+            try:
+                return j.id, src.fetch_detail(j)
+            except Exception as exc:  # never let one bad page break the batch
+                logger.debug("enrich detail failed for %s: %s", j.id, exc)
+                return j.id, ""
+
+        enriched = 0
+        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
+            futures = [pool.submit(_one, j) for j in targets]
+            for future in as_completed(futures):
+                jid, desc = future.result()
+                if desc and desc.strip():
+                    by_id[jid].description = desc.strip()
+                    enriched += 1
+        logger.info("Enriched %d/%d job descriptions from detail pages",
+                    enriched, len(targets))
+        return enriched
+
 
 def build_registry(config: AppConfig) -> SourceRegistry:
     """Instantiate and register all adapters."""

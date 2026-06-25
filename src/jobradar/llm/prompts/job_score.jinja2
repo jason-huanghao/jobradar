@@ -30,5 +30,5 @@ Company: {{ job.company }}
 Location: {{ job.location }}
 Type: {{ job.job_type }}{% if job.remote %} (remote){% endif %}
 Salary: {{ job.salary or "not specified" }}
-Description: {{ (job.description or "")[:400] }}
+Description: {{ job.description or "" }}
 {% endfor %}

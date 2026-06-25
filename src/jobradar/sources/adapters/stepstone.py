@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from ...models.job import RawJob, SearchQuery
 from ..base import JobSource, SourceError
+from ..detail import extract_jsonld_description
 from ..normalizer import make_id
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,21 @@ class StepstoneSource(JobSource):
                     seen.add(j.id)
                     all_jobs.append(j)
         return all_jobs
+
+    def fetch_detail(self, job: RawJob) -> str:
+        """StepStone list cards omit the description; the stellenangebote detail
+        page exposes it as JSON-LD. Best-effort: return "" on any failure."""
+        if not (job.url or "").startswith("http"):
+            return ""
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                resp = client.get(job.url, headers=_HEADERS)
+            if resp.status_code != 200:
+                return ""
+            return extract_jsonld_description(resp.text)
+        except Exception as e:
+            logger.debug("StepStone detail fetch failed for %s: %s", job.url, e)
+            return ""
 
     def _search(self, query: SearchQuery) -> list[RawJob]:
         max_results  = query.extra.get("max_results", 50)
@@ -145,7 +161,12 @@ def _parse_article(article) -> RawJob | None:
                     or article.select_one("[data-at='job-item-title']")
                     or article.select_one("a[href*='stellenangebote']"))
         title = title_el.get_text(strip=True) if title_el else ""
-        link_el = article.select_one("a[href]")
+        # Take the URL from the job link, NOT the first <a> in the card — the first
+        # anchor is usually the company-page link (/cmp/...), which is the wrong
+        # target and cannot be enriched with the job description later.
+        link_el = (title_el if title_el and title_el.get("href")
+                   else article.select_one("a[href*='stellenangebote']")
+                   or article.select_one("a[href]"))
         href    = link_el.get("href", "") if link_el else ""
         job_url = href if href.startswith("http") else f"https://www.stepstone.de{href}"
         company_el = (article.select_one("[data-at='job-item-company-name']")

@@ -53,5 +53,9 @@ htmlcov/
 # Build
 *.whl
 
+# Runtime artifacts (default config writes these next to the install dir)
+cache/
+jobradar.db
+
 # Personal config (keep config.example.yaml, not config.yaml)
 config.yaml

@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "llm" / "prompts"
 
-# Truncate long descriptions to avoid token-limit truncation of LLM response
-_MAX_DESC_CHARS = 400
+# Truncate long descriptions to avoid token-limit truncation of LLM response.
+# Generous by default: the scorer rates skills/seniority/language fit, which need
+# the actual requirements, not just the intro. (Was 400 — far too small: even a
+# rich job description was cut to ~60 words of boilerplate, so matches were noisy.)
+_MAX_DESC_CHARS = 2000
 
 
 def _profile_summary(profile: CandidateProfile) -> str:
@@ -42,13 +45,13 @@ def _profile_summary(profile: CandidateProfile) -> str:
     return "\n".join(parts)
 
 
-def _truncate_jobs(jobs: list[RawJob]) -> list[RawJob]:
+def _truncate_jobs(jobs: list[RawJob], max_chars: int = _MAX_DESC_CHARS) -> list[RawJob]:
     """Return shallow copies with descriptions truncated to avoid token overflow."""
     truncated = []
     for j in jobs:
-        if len(j.description or "") > _MAX_DESC_CHARS:
+        if len(j.description or "") > max_chars:
             jt = j.model_copy()
-            jt.description = j.description[:_MAX_DESC_CHARS] + "…"
+            jt.description = j.description[:max_chars] + "…"
             truncated.append(jt)
         else:
             truncated.append(j)
@@ -62,6 +65,7 @@ def score_jobs(
     batch_size: int = 5,
     on_batch_done: callable | None = None,
     feedback_context: str = "",
+    max_desc_chars: int = _MAX_DESC_CHARS,
 ) -> list[ScoredJob]:
     """Score all jobs in batches. Calls on_batch_done(scored_so_far) after each batch."""
     env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)))
@@ -80,7 +84,7 @@ def score_jobs(
         batch_num = i // batch_size + 1
         logger.info("Scoring batch %d/%d (%d jobs)…", batch_num, n_batches, len(batch))
 
-        results = _score_batch(batch, summary, template, llm)
+        results = _score_batch(batch, summary, template, llm, max_desc_chars)
         scored.extend(results)
 
         if on_batch_done:
@@ -98,8 +102,9 @@ def _score_batch(
     profile_summary: str,
     template,
     llm: LLMClient,
+    max_desc_chars: int = _MAX_DESC_CHARS,
 ) -> list[ScoredJob]:
-    truncated = _truncate_jobs(jobs)
+    truncated = _truncate_jobs(jobs, max_desc_chars)
     prompt = template.render(
         profile_summary=profile_summary,
         jobs=truncated,
@@ -112,7 +117,7 @@ def _score_batch(
             raise ValueError(f"Expected list, got {type(results)}")
     except Exception as exc:
         logger.warning("Batch scoring failed (%s) — falling back to per-job scoring", exc)
-        return _score_individually(jobs, profile_summary, template, llm)
+        return _score_individually(jobs, profile_summary, template, llm, max_desc_chars)
 
     scored: list[ScoredJob] = []
     for idx, job in enumerate(jobs):
@@ -136,11 +141,12 @@ def _score_individually(
     profile_summary: str,
     template,
     llm: LLMClient,
+    max_desc_chars: int = _MAX_DESC_CHARS,
 ) -> list[ScoredJob]:
     """Score each job alone — used as fallback when batch parse fails."""
     scored: list[ScoredJob] = []
     for job in jobs:
-        truncated = _truncate_jobs([job])
+        truncated = _truncate_jobs([job], max_desc_chars)
         prompt = template.render(
             profile_summary=profile_summary,
             jobs=truncated,

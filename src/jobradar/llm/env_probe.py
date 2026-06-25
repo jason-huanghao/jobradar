@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 _PROBE_TABLE = [
     # (display_name, env_var, base_url_env, model_env, default_base_url, default_model, provider_id)
+    ("Kimi",          "KIMI_API_KEY",       "KIMI_BASE_URL",       "KIMI_MODEL",
+     "https://api.kimi.com/coding/v1",                  "kimi-for-coding",          "kimi"),
     ("OpenClaw",      "OPENCLAW_API_KEY",   "OPENCLAW_BASE_URL",   "OPENCLAW_MODEL",
      "https://api.z.ai/v1",                             "claude-sonnet-4-20250514", "openclaw"),
     ("Z.AI",          "ZAI_API_KEY",        "ZAI_BASE_URL",        "ZAI_MODEL",

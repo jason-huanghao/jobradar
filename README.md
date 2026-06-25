@@ -74,7 +74,7 @@ The agent runs `setup` → scrapes 36+ jobs → scores with AI → publishes HTM
 | 🌐 **7 job sources, parallel** | Arbeitsagentur, Indeed, Glassdoor, Google Jobs, StepStone, XING, BOSS直聘, 拉勾网, 智联招聘 — all at once |
 | 🤖 **AI match scoring** | 6-dimension fit score (0–10) with full reasoning — know *why* a job ranked high |
 | 🔑 **Zero-config API key** | Auto-detected from OpenClaw auth, Claude OAuth, or env vars |
-| 🔌 **Any LLM, zero lock-in** | Volcengine Ark, Z.AI, OpenAI, DeepSeek, OpenRouter, Ollama — auto-detected |
+| 🔌 **Any LLM, zero lock-in** | Kimi, Volcengine Ark, Z.AI, OpenAI, DeepSeek, OpenRouter, Ollama — auto-detected |
 | ✉️ **Tailored cover letters** | Company-specific, CV-aware, LLM-generated — not templates |
 | 📝 **CV section optimizer** | Rewrites your summary + skills section to match each job description |
 | 📊 **HTML report + Excel** | Shareable GitHub Pages report + colour-coded Excel tracker |
@@ -253,13 +253,14 @@ Auto-detected in this priority order — **no config change needed** if your key
 | 0 | **OpenClaw auth-profiles** | auto | Volcengine key from `~/.openclaw/…/auth-profiles.json` |
 | 1 | **Claude OAuth** | auto | `~/.claude/.credentials.json` |
 | 2 | `config.yaml` explicit | — | Pins a specific model |
-| 3 | **Volcengine Ark** | `ARK_API_KEY` | doubao-seed series, best for CN |
-| 4 | **Z.AI** | `ZAI_API_KEY` | Z.AI coding plan |
-| 5 | **OpenAI** | `OPENAI_API_KEY` | gpt-4o-mini recommended |
-| 6 | **DeepSeek** | `DEEPSEEK_API_KEY` | Most affordable |
-| 7 | **OpenRouter** | `OPENROUTER_API_KEY` | 200+ models, one key |
-| 8 | **Ollama** | *(none)* | Fully local, auto-detected |
-| 9 | **LM Studio** | *(none)* | Local, auto-detected |
+| 3 | **Kimi (coding)** | `KIMI_API_KEY` | Moonshot coding plan, `kimi-for-coding` |
+| 4 | **Volcengine Ark** | `ARK_API_KEY` | doubao-seed series, best for CN |
+| 5 | **Z.AI** | `ZAI_API_KEY` | Z.AI coding plan |
+| 6 | **OpenAI** | `OPENAI_API_KEY` | gpt-4o-mini recommended |
+| 7 | **DeepSeek** | `DEEPSEEK_API_KEY` | Most affordable |
+| 8 | **OpenRouter** | `OPENROUTER_API_KEY` | 200+ models, one key |
+| 9 | **Ollama** | *(none)* | Fully local, auto-detected |
+| 10 | **LM Studio** | *(none)* | Local, auto-detected |
 
 ---
 
@@ -280,6 +281,8 @@ search:
   locations: ["Berlin", "Hamburg", "Remote"]
   max_days_old: 14                   # posting TTL — older postings count as expired
   staleness_days: 7                  # not seen in N days → expired (sweep hides it)
+  enrich_descriptions: true          # fetch detail pages to fill missing JD text
+  enrich_max: 40                     # cap detail fetches per run (they are slow)
   exclude_keywords: ["Praktikum", "Werkstudent", "internship"]
   exclude_companies: ["MyFormerEmployer"]
 
@@ -291,6 +294,7 @@ scoring:
   min_score_digest: 6.0              # digest threshold
   min_score_application: 7.0         # cover letter + CV section generated
   auto_apply_min_score: 7.5          # threshold for jobradar apply
+  max_desc_chars: 2000               # per-job description budget sent to the LLM scorer
 
 sources:
   bosszhipin: { enabled: false }     # set true after cookie setup + pip install -e ".[cn]"
